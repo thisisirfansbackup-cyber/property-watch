@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="refresh" content="900" />
+<title>Property Watch - Heckmondwike</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+.header { padding: 24px 20px 16px; text-align: center; border-bottom: 1px solid #1e293b; }
+.header h1 { font-size: 20px; font-weight: 600; color: #f8fafc; }
+.header .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
+.header .count { font-size: 14px; color: #38bdf8; margin-top: 6px; font-weight: 500; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; padding: 20px; max-width: 1200px; margin: 0 auto; }
+.card { display: block; background: #1e293b; border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.15s, box-shadow 0.15s; position: relative; }
+.card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
+.img-wrap { width: 100%; height: 200px; overflow: hidden; background: #334155; }
+.img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.info { padding: 16px; }
+.price-row { display: flex; align-items: center; gap: 8px; }
+.price { font-size: 22px; font-weight: 700; color: #f8fafc; }
+.old-price { font-size: 14px; color: #94a3b8; text-decoration: line-through; }
+.drop-arrow { color: #22c55e; font-size: 14px; }
+.meta { font-size: 13px; color: #94a3b8; margin-top: 6px; }
+.address { font-size: 14px; color: #cbd5e1; margin-top: 6px; line-height: 1.4; }
+.details { margin-top: 10px; }
+.size { display: inline-block; background: #334155; color: #38bdf8; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+.size.unknown { color: #64748b; }
+.tag { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; z-index: 2; }
+.tag.new { background: #22c55e; color: #fff; }
+.tag.drop { background: #f59e0b; color: #fff; }
+.empty { text-align: center; padding: 60px 20px; color: #64748b; font-size: 15px; }
+.footer { text-align: center; padding: 20px; color: #475569; font-size: 12px; border-top: 1px solid #1e293b; }
+@media (max-width: 480px) {
+    .grid { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+    .img-wrap { height: 180px; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>Property Watch &mdash; Heckmondwike</h1>
+    <div class="sub">3-bed terraced/semi-detached &middot; &pound;120k&ndash;&pound;220k &middot; 2mi radius</div>
+    <div class="count">7 matching properties</div>
+</div>
+<div class="grid">
+
+        <a href="https://www.onthemarket.com/details/19914264/" target="_blank" rel="noopener" class="card">
+            
+            <div class="img-wrap">
+                <img src="https://media.onthemarket.com/properties/19914264/1628709955/image-0-480x320.webp" alt="Lincoln Avenue, West Yorkshire WF15" loading="lazy" />
+            </div>
+            <div class="info">
+                <div class="price-row">
+                    <span class="price">&pound;165,000</span>
+                </div>
+                <div class="meta">
+                    3 bed &middot; Semi-Detached House &middot; Unknown
+                </div>
+                <div class="address">Lincoln Avenue, West Yorkshire WF15</div>
+                <div class="details">
+                    <span class="size">850 sq ft (79 m&sup2;)</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="https://www.onthemarket.com/details/19588017/" target="_blank" rel="noopener" class="card">
+            
+            <div class="img-wrap">
+                <img src="https://media.onthemarket.com/properties/19588017/1625519595/image-0-480x320.webp" alt="Bradford Road, West Yorkshire WF15" loading="lazy" />
+            </div>
+            <div class="info">
+                <div class="price-row">
+                    <span class="price">&pound;188,000</span>
+                </div>
+                <div class="meta">
+                    3 bed &middot; Terraced House &middot; Unknown
+                </div>
+                <div class="address">Bradford Road, West Yorkshire WF15</div>
+                <div class="details">
+                    <span class="size">764 sq ft (71 m&sup2;)</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="https://www.onthemarket.com/details/19722856/" target="_blank" rel="noopener" class="card">
+            
+            <div class="img-wrap">
+                <img src="https://media.onthemarket.com/properties/19722856/1621952545/image-0-480x320.webp" alt="Denby Close, Liversedge, West Yorkshire, WF15" loading="lazy" />
+            </div>
+            <div class="info">
+                <div class="price-row">
+                    <span class="price">&pound;165,000</span>
+                </div>
+                <div class="meta">
+                    3 bed &middot; Terraced House &middot; Unknown
+                </div>
+                <div class="address">Denby Close, Liversedge, West Yorkshire, WF15</div>
+                <div class="details">
+                    <span class="size">731 sq ft (68 m&sup2;)</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="https://www.onthemarket.com/details/19245936/" target="_blank" rel="noopener" class="card">
+            
+            <div class="img-wrap">
+                <img src="https://media.onthemarket.com/properties/19245936/1638843202/image-0-480x320.webp" alt="Cornmill Drive, Liversedge, WF15" loading="lazy" />
+            </div>
+            <div class="info">
+                <div class="price-row">
+                    <span class="price">&pound;170,000</span>
+                </div>
+                <div class="meta">
+                    3 bed &middot; Semi-Detached House &middot; Unknown
+                </div>
+                <div class="address">Cornmill Drive, Liversedge, WF15</div>
+                <div class="details">
+                    <span class="size">667 sq ft (62 m&sup2;)</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="https://www.onthemarket.com/details/19947904/" target="_blank" rel="noopener" class="card">
+            
+            <div class="img-wrap">
+                <img src="https://media.onthemarket.com/properties/19947904/1629870031/image-0-480x320.webp" alt="Lyndale Mews, Staincliffe, Dewsbury, WF13" loading="lazy" />
+            </div>
+            <div class="info">
+                <div class="price-row">
+                    <span class="price">&pound;175,000</span>
+                </div>
+                <div class="meta">
+                    3 bed &middot; Terraced House &middot; Unknown
+                </div>
+                <div class="address">Lyndale Mews, Staincliffe, Dewsbury, WF13</div>
+                <div class="details">
+                    <span class="size">656 sq ft (61 m&sup2;)</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="https://www.onthemarket.com/details/20101927/" target="_blank" rel="noopener" class="card">
+            
+            <div class="img-wrap">
+                <img src="https://media.onthemarket.com/properties/20101927/1635896723/image-0-480x320.webp" alt="Walkley Villas, Heckmondwike" loading="lazy" />
+            </div>
+            <div class="info">
+                <div class="price-row">
+                    <span class="price">&pound;210,000</span>
+                </div>
+                <div class="meta">
+                    3 bed &middot; Semi-Detached House &middot; Unknown
+                </div>
+                <div class="address">Walkley Villas, Heckmondwike</div>
+                <div class="details">
+                    <span class="size unknown">Size unknown</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="https://www.onthemarket.com/details/19007492/" target="_blank" rel="noopener" class="card">
+            
+            <div class="img-wrap">
+                <img src="https://media.onthemarket.com/properties/19007492/1630202729/image-0-480x320.webp" alt="Lascelles Road, Heckmondwike" loading="lazy" />
+            </div>
+            <div class="info">
+                <div class="price-row">
+                    <span class="price">&pound;220,000</span>
+                </div>
+                <div class="meta">
+                    3 bed &middot; Semi-Detached House &middot; Unknown
+                </div>
+                <div class="address">Lascelles Road, Heckmondwike</div>
+                <div class="details">
+                    <span class="size unknown">Size unknown</span>
+                </div>
+            </div>
+        </a>
+
+</div>
+<div class="footer">
+    Updated 24 Aug 2026, 09:45 &middot; Auto-refreshes every 15 minutes &middot; Sorted by size (largest first)
+</div>
+</body>
+</html>
