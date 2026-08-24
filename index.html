@@ -12,6 +12,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .header h1 { font-size: 20px; font-weight: 600; color: #f8fafc; }
 .header .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
 .header .count { font-size: 14px; color: #38bdf8; margin-top: 6px; font-weight: 500; }
+.market-temp { display: flex; justify-content: center; gap: 16px; padding: 8px 20px; flex-wrap: wrap; }
+.temp-item { font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 500; }
+.temp-item.rising { background: #052e16; color: #22c55e; }
+.temp-item.stable { background: #0c2d48; color: #38bdf8; }
+.temp-item.cooling { background: #422006; color: #f59e0b; }
 .summary { display: flex; justify-content: center; gap: 24px; padding: 12px 20px; border-bottom: 1px solid #1e293b; flex-wrap: wrap; }
 .summary-item { text-align: center; }
 .summary-item .num { font-size: 20px; font-weight: 700; }
@@ -30,16 +35,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .price { font-size: 22px; font-weight: 700; color: #f8fafc; }
 .old-price { font-size: 14px; color: #94a3b8; text-decoration: line-through; }
 .drop-arrow { color: #22c55e; font-size: 14px; }
-.confidence { margin-left: auto; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.badges-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.confidence { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; }
 .confidence.great { background: #052e16; color: #22c55e; border: 1px solid #166534; }
 .confidence.fair { background: #0c2d48; color: #38bdf8; border: 1px solid #075985; }
 .confidence.over { background: #422006; color: #f59e0b; border: 1px solid #92400e; }
 .confidence.bad { background: #450a0a; color: #ef4444; border: 1px solid #991b1b; }
-.confidence-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+.confidence-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 .confidence-label.great { color: #22c55e; }
 .confidence-label.fair { color: #38bdf8; }
 .confidence-label.over { color: #f59e0b; }
 .confidence-label.bad { color: #ef4444; }
+.rank-best { background: #854d0e; color: #fbbf24; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.rank { background: #1e293b; color: #94a3b8; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; border: 1px solid #334155; }
+.rank-label { font-size: 11px; color: #64748b; }
 .meta { font-size: 13px; color: #94a3b8; margin-top: 6px; }
 .address { font-size: 14px; color: #cbd5e1; margin-top: 6px; line-height: 1.4; }
 .details { margin-top: 10px; }
@@ -48,6 +57,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .tag { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; z-index: 2; }
 .tag.new { background: #22c55e; color: #fff; }
 .tag.drop { background: #f59e0b; color: #fff; }
+.negotiation { padding: 10px 16px; border-top: 1px solid #334155; background: #0f172a; }
+.neg-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
+.neg-text { font-size: 14px; font-weight: 600; }
+.neg-text.strong { color: #22c55e; }
+.neg-text.fair { color: #38bdf8; }
+.neg-text.negotiate { color: #f59e0b; }
+.neg-text.overpriced { color: #ef4444; }
+.neg-detail { font-size: 11px; color: #64748b; margin-top: 2px; }
 .mortgage { padding: 12px 16px; border-top: 1px solid #334155; background: #0f172a; }
 .mortgage-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 8px; }
 .mortgage-row { display: flex; justify-content: space-between; font-size: 13px; color: #94a3b8; padding: 2px 0; }
@@ -59,15 +76,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .factor-label { font-size: 12px; color: #94a3b8; font-weight: 500; }
 .factor-detail { font-size: 11px; color: #64748b; margin-top: 1px; }
 .factor-bar { height: 4px; background: #334155; border-radius: 2px; margin-top: 4px; overflow: hidden; }
-.factor-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
-.factor-fill { background: #38bdf8; }
+.factor-fill { height: 100%; background: #38bdf8; border-radius: 2px; transition: width 0.3s; }
 .empty { text-align: center; padding: 60px 20px; color: #64748b; font-size: 15px; }
 .footer { text-align: center; padding: 20px; color: #475569; font-size: 12px; border-top: 1px solid #1e293b; }
 @media (max-width: 480px) {
     .grid { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
     .img-wrap { height: 180px; }
-    .confidence { margin-left: 0; margin-top: 4px; }
-    .price-row { flex-direction: column; align-items: flex-start; }
+    .badges-row { flex-direction: column; align-items: flex-start; }
 }
 </style>
 </head>
@@ -75,17 +90,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="header">
     <h1>Property Watch &mdash; Heckmondwike</h1>
     <div class="sub">3-bed terraced/semi-detached &middot; &pound;120k&ndash;&pound;220k &middot; 2mi radius</div>
-    <div class="count">7 matching properties &middot; Avg confidence: 65/100</div>
+    <div class="count">7 matching properties &middot; Avg confidence: 52/100</div>
 </div>
+<div class="market-temp"><span class="temp-item stable">WF15: &#9679; Stable (+0.0%)</span><span class="temp-item stable">WF13: &#9679; Stable (+0.0%)</span></div>
 <div class="summary">
-    <div class="summary-item great"><div class="num">1</div><div class="label">Great Deals</div></div>
-    <div class="summary-item fair"><div class="num">4</div><div class="label">Fair Price</div></div>
-    <div class="summary-item over"><div class="num">2</div><div class="label">Overpriced</div></div>
+    <div class="summary-item great"><div class="num">0</div><div class="label">Great Deals</div></div>
+    <div class="summary-item fair"><div class="num">3</div><div class="label">Fair Price</div></div>
+    <div class="summary-item over"><div class="num">4</div><div class="label">Overpriced</div></div>
 </div>
 <div class="grid">
 
         <div class="card">
-            
+            <span class="tag new">NEW</span>
             <a href="https://www.onthemarket.com/details/19914264/" target="_blank" rel="noopener" class="card-link">
                 <div class="img-wrap">
                     <img src="https://media.onthemarket.com/properties/19914264/1628709955/image-0-480x320.webp" alt="Lincoln Avenue, West Yorkshire WF15" loading="lazy" />
@@ -93,9 +109,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                 <div class="info">
                     <div class="price-row">
                         <span class="price">&pound;165,000</span>
-                        <span class="confidence great">84/100</span>
                     </div>
-                    <div class="confidence-label great">Great Deal</div>
+                    <div class="badges-row">
+                        <span class="confidence fair">78</span>
+                        <span class="confidence-label fair">Fair Price</span>
+                        <span class="rank-best">&#9733; #1</span>
+                        <span class="rank-label">Best Value</span>
+                    </div>
                     <div class="meta">
                         3 bed &middot; Semi-Detached House &middot; Unknown
                     </div>
@@ -106,41 +126,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                 </div>
             </a>
             
-                <div class="mortgage">
-                    <div class="mortgage-title">First-Time Buyer Estimate</div>
-                    <div class="mortgage-row"><span>Monthly payment</span><span class="mortgage-val">&pound;667/mo</span></div>
-                    <div class="mortgage-row"><span>Deposit</span><span>&pound;45,000</span></div>
-                    <div class="mortgage-row"><span>Stamp duty</span><span>None (&pound;0)</span></div>
-                    <div class="mortgage-row total"><span>Total upfront</span><span>&pound;47,500</span></div>
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text strong">Below average — strong offer &pound;160,050&ndash;&pound;165,000</div>
+                    <div class="neg-detail">Area median: &pound;178,000.0 &middot; Asking is -7.3% vs median</div>
                 </div>
-            
-                <div class="breakdown">
-                    <div class="breakdown-title">Confidence Breakdown</div>
-                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking price is 94% of area avg (£174,667)</span><div class="factor-bar"><div class="factor-fill" style="width:100%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;194/sqft vs area avg &pound;233/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:100%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">On market 0 days</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
-                </div>
-        </div>
-
-        <div class="card">
-            
-            <a href="https://www.onthemarket.com/details/19722856/" target="_blank" rel="noopener" class="card-link">
-                <div class="img-wrap">
-                    <img src="https://media.onthemarket.com/properties/19722856/1621952545/image-0-480x320.webp" alt="Denby Close, Liversedge, West Yorkshire, WF15" loading="lazy" />
-                </div>
-                <div class="info">
-                    <div class="price-row">
-                        <span class="price">&pound;165,000</span>
-                        <span class="confidence fair">78/100</span>
-                    </div>
-                    <div class="confidence-label fair">Fair Price</div>
-                    <div class="meta">
-                        3 bed &middot; Terraced House &middot; Unknown
-                    </div>
-                    <div class="address">Denby Close, Liversedge, West Yorkshire, WF15</div>
-                    <div class="details">
-                        <span class="size">731 sq ft (68 m&sup2;)</span>
-                    </div>
-                </div>
-            </a>
             
                 <div class="mortgage">
                     <div class="mortgage-title">First-Time Buyer Estimate</div>
@@ -152,12 +142,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
             
                 <div class="breakdown">
                     <div class="breakdown-title">Confidence Breakdown</div>
-                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking price is 94% of area avg (£174,667)</span><div class="factor-bar"><div class="factor-fill" style="width:100%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;226/sqft vs area avg &pound;233/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">On market 0 days</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
+                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking is 93% of area median (&pound;178,000)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;194/sqft vs area &pound;269/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:100%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">Listing age unknown</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Market Context</span><span class="factor-detail">89% of current avg (&pound;184,714)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div>
                 </div>
         </div>
 
         <div class="card">
-            
+            <span class="tag new">NEW</span>
             <a href="https://www.onthemarket.com/details/19245936/" target="_blank" rel="noopener" class="card-link">
                 <div class="img-wrap">
                     <img src="https://media.onthemarket.com/properties/19245936/1638843202/image-0-480x320.webp" alt="Cornmill Drive, Liversedge, WF15" loading="lazy" />
@@ -165,9 +155,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                 <div class="info">
                     <div class="price-row">
                         <span class="price">&pound;170,000</span>
-                        <span class="confidence fair">72/100</span>
                     </div>
-                    <div class="confidence-label fair">Fair Price</div>
+                    <div class="badges-row">
+                        <span class="confidence fair">72</span>
+                        <span class="confidence-label fair">Fair Price</span>
+                        <span class="rank">#2</span>
+                        <span class="rank-label">#2 of 7</span>
+                    </div>
                     <div class="meta">
                         3 bed &middot; Semi-Detached House &middot; Unknown
                     </div>
@@ -177,6 +171,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                     </div>
                 </div>
             </a>
+            
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text strong">Below average — strong offer &pound;164,900&ndash;&pound;170,000</div>
+                    <div class="neg-detail">Area median: &pound;178,000.0 &middot; Asking is -4.5% vs median</div>
+                </div>
             
                 <div class="mortgage">
                     <div class="mortgage-title">First-Time Buyer Estimate</div>
@@ -188,12 +188,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
             
                 <div class="breakdown">
                     <div class="breakdown-title">Confidence Breakdown</div>
-                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking price is 97% of area avg (£174,667)</span><div class="factor-bar"><div class="factor-fill" style="width:100%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;255/sqft vs area avg &pound;233/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:60%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">On market 0 days</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
+                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking is 96% of area median (&pound;178,000)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;255/sqft vs area &pound;269/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">Listing age unknown</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Market Context</span><span class="factor-detail">92% of current avg (&pound;184,714)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div>
                 </div>
         </div>
 
         <div class="card">
-            
+            <span class="tag new">NEW</span>
             <a href="https://www.onthemarket.com/details/19947904/" target="_blank" rel="noopener" class="card-link">
                 <div class="img-wrap">
                     <img src="https://media.onthemarket.com/properties/19947904/1629870031/image-0-480x320.webp" alt="Lyndale Mews, Staincliffe, Dewsbury, WF13" loading="lazy" />
@@ -201,9 +201,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                 <div class="info">
                     <div class="price-row">
                         <span class="price">&pound;175,000</span>
-                        <span class="confidence fair">72/100</span>
                     </div>
-                    <div class="confidence-label fair">Fair Price</div>
+                    <div class="badges-row">
+                        <span class="confidence fair">68</span>
+                        <span class="confidence-label fair">Fair Price</span>
+                        <span class="rank">#3</span>
+                        <span class="rank-label">#3 of 7</span>
+                    </div>
                     <div class="meta">
                         3 bed &middot; Terraced House &middot; Unknown
                     </div>
@@ -213,6 +217,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                     </div>
                 </div>
             </a>
+            
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text strong">Below average — strong offer &pound;169,750&ndash;&pound;175,000</div>
+                    <div class="neg-detail">Area median: &pound;190,000.0 &middot; Asking is -7.9% vs median</div>
+                </div>
             
                 <div class="mortgage">
                     <div class="mortgage-title">First-Time Buyer Estimate</div>
@@ -224,35 +234,45 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
             
                 <div class="breakdown">
                     <div class="breakdown-title">Confidence Breakdown</div>
-                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking price is 91% of area avg (£191,333)</span><div class="factor-bar"><div class="factor-fill" style="width:100%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;267/sqft vs area avg &pound;255/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:60%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">On market 0 days</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
+                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking is 92% of area median (&pound;190,000)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;267/sqft vs area &pound;253/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:60%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">Listing age unknown</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Market Context</span><span class="factor-detail">95% of current avg (&pound;184,714)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div>
                 </div>
         </div>
 
         <div class="card">
-            
-            <a href="https://www.onthemarket.com/details/19588017/" target="_blank" rel="noopener" class="card-link">
+            <span class="tag new">NEW</span>
+            <a href="https://www.onthemarket.com/details/19722856/" target="_blank" rel="noopener" class="card-link">
                 <div class="img-wrap">
-                    <img src="https://media.onthemarket.com/properties/19588017/1625519595/image-0-480x320.webp" alt="Bradford Road, West Yorkshire WF15" loading="lazy" />
+                    <img src="https://media.onthemarket.com/properties/19722856/1621952545/image-0-480x320.webp" alt="Denby Close, Liversedge, West Yorkshire, WF15" loading="lazy" />
                 </div>
                 <div class="info">
                     <div class="price-row">
-                        <span class="price">&pound;188,000</span>
-                        <span class="confidence fair">64/100</span>
+                        <span class="price">&pound;165,000</span>
                     </div>
-                    <div class="confidence-label fair">Fair Price</div>
+                    <div class="badges-row">
+                        <span class="confidence over">44</span>
+                        <span class="confidence-label over">Overpriced</span>
+                        <span class="rank">#4</span>
+                        <span class="rank-label">#4 of 7</span>
+                    </div>
                     <div class="meta">
                         3 bed &middot; Terraced House &middot; Unknown
                     </div>
-                    <div class="address">Bradford Road, West Yorkshire WF15</div>
+                    <div class="address">Denby Close, Liversedge, West Yorkshire, WF15</div>
                     <div class="details">
-                        <span class="size">764 sq ft (71 m&sup2;)</span>
+                        <span class="size">731 sq ft (68 m&sup2;)</span>
                     </div>
                 </div>
             </a>
             
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text overpriced">Consider offering &pound;129,200</div>
+                    <div class="neg-detail">Area median: &pound;136,000.0 &middot; Asking is +21.3% vs median</div>
+                </div>
+            
                 <div class="mortgage">
                     <div class="mortgage-title">First-Time Buyer Estimate</div>
-                    <div class="mortgage-row"><span>Monthly payment</span><span class="mortgage-val">&pound;795/mo</span></div>
+                    <div class="mortgage-row"><span>Monthly payment</span><span class="mortgage-val">&pound;667/mo</span></div>
                     <div class="mortgage-row"><span>Deposit</span><span>&pound;45,000</span></div>
                     <div class="mortgage-row"><span>Stamp duty</span><span>None (&pound;0)</span></div>
                     <div class="mortgage-row total"><span>Total upfront</span><span>&pound;47,500</span></div>
@@ -260,12 +280,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
             
                 <div class="breakdown">
                     <div class="breakdown-title">Confidence Breakdown</div>
-                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking price is 108% of area avg (£174,667)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;246/sqft vs area avg &pound;233/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:60%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">On market 0 days</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
+                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking is 121% of area median (&pound;136,000)</span><div class="factor-bar"><div class="factor-fill" style="width:20%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;226/sqft vs area &pound;200/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">Listing age unknown</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Market Context</span><span class="factor-detail">89% of current avg (&pound;184,714)</span><div class="factor-bar"><div class="factor-fill" style="width:80%"></div></div></div>
                 </div>
         </div>
 
         <div class="card">
-            
+            <span class="tag new">NEW</span>
             <a href="https://www.onthemarket.com/details/20101927/" target="_blank" rel="noopener" class="card-link">
                 <div class="img-wrap">
                     <img src="https://media.onthemarket.com/properties/20101927/1635896723/image-0-480x320.webp" alt="Walkley Villas, Heckmondwike" loading="lazy" />
@@ -273,9 +293,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                 <div class="info">
                     <div class="price-row">
                         <span class="price">&pound;210,000</span>
-                        <span class="confidence over">42/100</span>
                     </div>
-                    <div class="confidence-label over">Overpriced</div>
+                    <div class="badges-row">
+                        <span class="confidence over">43</span>
+                        <span class="confidence-label over">Overpriced</span>
+                        <span class="rank">#5</span>
+                        <span class="rank-label">#5 of 7</span>
+                    </div>
                     <div class="meta">
                         3 bed &middot; Semi-Detached House &middot; Unknown
                     </div>
@@ -285,6 +309,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                     </div>
                 </div>
             </a>
+            
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text overpriced">Consider offering &pound;169,100</div>
+                    <div class="neg-detail">Area median: &pound;178,000.0 &middot; Asking is +18.0% vs median</div>
+                </div>
             
                 <div class="mortgage">
                     <div class="mortgage-title">First-Time Buyer Estimate</div>
@@ -296,12 +326,58 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
             
                 <div class="breakdown">
                     <div class="breakdown-title">Confidence Breakdown</div>
-                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking price is 120% of area avg (£174,667)</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">Sq ft unknown &mdash; scored on price comparison only</span></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">On market 0 days</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
+                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking is 118% of area median (&pound;178,000)</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">Sq ft unknown &mdash; scored on price comparison only</span></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">Listing age unknown</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Market Context</span><span class="factor-detail">114% of current avg (&pound;184,714)</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
                 </div>
         </div>
 
         <div class="card">
+            <span class="tag new">NEW</span>
+            <a href="https://www.onthemarket.com/details/19588017/" target="_blank" rel="noopener" class="card-link">
+                <div class="img-wrap">
+                    <img src="https://media.onthemarket.com/properties/19588017/1625519595/image-0-480x320.webp" alt="Bradford Road, West Yorkshire WF15" loading="lazy" />
+                </div>
+                <div class="info">
+                    <div class="price-row">
+                        <span class="price">&pound;188,000</span>
+                    </div>
+                    <div class="badges-row">
+                        <span class="confidence bad">30</span>
+                        <span class="confidence-label bad">Way Over</span>
+                        <span class="rank">#6</span>
+                        <span class="rank-label">#6 of 7</span>
+                    </div>
+                    <div class="meta">
+                        3 bed &middot; Terraced House &middot; Unknown
+                    </div>
+                    <div class="address">Bradford Road, West Yorkshire WF15</div>
+                    <div class="details">
+                        <span class="size">764 sq ft (71 m&sup2;)</span>
+                    </div>
+                </div>
+            </a>
             
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text overpriced">Consider offering &pound;129,200</div>
+                    <div class="neg-detail">Area median: &pound;136,000.0 &middot; Asking is +38.2% vs median</div>
+                </div>
+            
+                <div class="mortgage">
+                    <div class="mortgage-title">First-Time Buyer Estimate</div>
+                    <div class="mortgage-row"><span>Monthly payment</span><span class="mortgage-val">&pound;795/mo</span></div>
+                    <div class="mortgage-row"><span>Deposit</span><span>&pound;45,000</span></div>
+                    <div class="mortgage-row"><span>Stamp duty</span><span>None (&pound;0)</span></div>
+                    <div class="mortgage-row total"><span>Total upfront</span><span>&pound;47,500</span></div>
+                </div>
+            
+                <div class="breakdown">
+                    <div class="breakdown-title">Confidence Breakdown</div>
+                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking is 138% of area median (&pound;136,000)</span><div class="factor-bar"><div class="factor-fill" style="width:0%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">&pound;246/sqft vs area &pound;200/sqft</span><div class="factor-bar"><div class="factor-fill" style="width:20%"></div></div></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">Listing age unknown</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Market Context</span><span class="factor-detail">102% of current avg (&pound;184,714)</span><div class="factor-bar"><div class="factor-fill" style="width:60%"></div></div></div>
+                </div>
+        </div>
+
+        <div class="card">
+            <span class="tag new">NEW</span>
             <a href="https://www.onthemarket.com/details/19007492/" target="_blank" rel="noopener" class="card-link">
                 <div class="img-wrap">
                     <img src="https://media.onthemarket.com/properties/19007492/1630202729/image-0-480x320.webp" alt="Lascelles Road, Heckmondwike" loading="lazy" />
@@ -309,9 +385,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                 <div class="info">
                     <div class="price-row">
                         <span class="price">&pound;220,000</span>
-                        <span class="confidence over">42/100</span>
                     </div>
-                    <div class="confidence-label over">Overpriced</div>
+                    <div class="badges-row">
+                        <span class="confidence bad">30</span>
+                        <span class="confidence-label bad">Way Over</span>
+                        <span class="rank">#7</span>
+                        <span class="rank-label">#7 of 7</span>
+                    </div>
                     <div class="meta">
                         3 bed &middot; Semi-Detached House &middot; Unknown
                     </div>
@@ -321,6 +401,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
                     </div>
                 </div>
             </a>
+            
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text overpriced">Consider offering &pound;169,100</div>
+                    <div class="neg-detail">Area median: &pound;178,000.0 &middot; Asking is +23.6% vs median</div>
+                </div>
             
                 <div class="mortgage">
                     <div class="mortgage-title">First-Time Buyer Estimate</div>
@@ -332,14 +418,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
             
                 <div class="breakdown">
                     <div class="breakdown-title">Confidence Breakdown</div>
-                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking price is 126% of area avg (£174,667)</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">Sq ft unknown &mdash; scored on price comparison only</span></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">On market 0 days</span><div class="factor-bar"><div class="factor-fill" style="width:40%"></div></div></div>
+                    <div class="factor"><span class="factor-label">vs Area Sold Prices</span><span class="factor-detail">Asking is 124% of area median (&pound;178,000)</span><div class="factor-bar"><div class="factor-fill" style="width:20%"></div></div></div><div class="factor"><span class="factor-label">Price per sqft</span><span class="factor-detail">Sq ft unknown &mdash; scored on price comparison only</span></div><div class="factor"><span class="factor-label">Price Drop</span><span class="factor-detail">No price drop recorded</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Listing Age</span><span class="factor-detail">Listing age unknown</span><div class="factor-bar"><div class="factor-fill" style="width:50%"></div></div></div><div class="factor"><span class="factor-label">Market Context</span><span class="factor-detail">119% of current avg (&pound;184,714)</span><div class="factor-bar"><div class="factor-fill" style="width:20%"></div></div></div>
                 </div>
         </div>
 
 </div>
 <div class="footer">
-    Updated 24 Aug 2026, 10:15 &middot; Auto-refreshes every 15 minutes &middot; Sorted by buying confidence (best first)<br/>
-    Sold prices from HM Land Registry &middot; Mortgage estimate: &pound;45,000 deposit at 4.5% over 25 years
+    Updated 24 Aug 2026, 10:19 &middot; Auto-refreshes every 15 minutes &middot; Dynamic scoring with market context<br/>
+    Sold prices from HM Land Registry &middot; Mortgage: &pound;45,000 deposit at 4.5% over 25 years
 </div>
 </body>
 </html>
