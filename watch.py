@@ -1,42 +1,113 @@
 #!/usr/bin/env python3
 """Property watch - monitors Heckmondwike area property listings.
 
-Checks OnTheMarket for 3-bed terraced/semi-detached houses in Heckmondwike
-and 2 miles radius, £120k-£220k. Emails alerts for new listings and price drops.
-Generates an HTML dashboard sorted by house size (sq ft).
+Checks OnTheMarket and Barkers for 3-bed terraced/semi-detached houses near
+Heckmondwike within the configured price band. Alerts on new listings and price
+drops via email and Telegram. Tracks per-property price history, off-market /
+re-listed status, street-level sold comparables, and generates an HTML dashboard
+with buying-confidence scores, mortgage estimates and market temperature.
+
+Secrets (Gmail app password, Telegram bot token) are resolved from environment
+variables first (GMAIL_APP_PASSWORD, TELEGRAM_BOT_TOKEN), then from config.json,
+then from the git-ignored config.local.json overlay. Set PROPERTY_WATCH_SKIP_PUSH=1
+to skip the automatic git push (CI commits and pushes itself).
 """
 
+import csv
+import io
 import json
+import os
 import re
 import shutil
 import smtplib
+import statistics
+import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 from curl_cffi import requests as cffi_requests
 
 SCRIPT_DIR = Path(__file__).parent
 CONFIG_FILE = SCRIPT_DIR / "config.json"
+LOCAL_CONFIG_FILE = SCRIPT_DIR / "config.local.json"
 STATE_FILE = SCRIPT_DIR / "state.json"
 STATE_BAK = SCRIPT_DIR / "state.json.bak"
 LOG_FILE = SCRIPT_DIR / "alerts.log"
 HTML_FILE = SCRIPT_DIR / "index.html"
+SOLD_CACHE_FILE = SCRIPT_DIR / "sold_cache.json"
+
+# Tracking / watchdog tunables
+OFF_MARKET_MAX = 30                # most recent "off market" entries kept in state
+MISSING_RUNS_BEFORE_OFF_MARKET = 2 # consecutive misses before a listing is marked off-market
+PRICE_HISTORY_MAX = 12             # per-listing price points retained
+WATCHDOG_FAIL_THRESHOLD = 3        # consecutive degraded runs before a watchdog alert fires
 
 SESSION = cffi_requests.Session(impersonate="chrome")
 
+# Mortgage defaults (first-time buyer, £45k deposit, 4.5% rate, 25 years)
+DEPOSIT = 45000
+MORTGAGE_RATE = 0.045
+MORTGAGE_YEARS = 25
+STAMP_DUTY_THRESHOLD = 300000  # First-time buyer pays nothing under £300k
+
+
+def _deep_merge(base, overlay):
+    """Recursively merge overlay dict into base (overlay wins)."""
+    result = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
 
 def load_config():
+    """Load config.json, overlaying the git-ignored config.local.json if present."""
     with open(CONFIG_FILE) as f:
-        return json.load(f)
+        config = json.load(f)
+    if LOCAL_CONFIG_FILE.exists():
+        try:
+            with open(LOCAL_CONFIG_FILE) as f:
+                local = json.load(f)
+            config = _deep_merge(config, local)
+            log("Loaded local config overlay (config.local.json)")
+        except Exception as e:
+            log(f"WARNING: could not load config.local.json: {e}")
+    return config
+
+
+def get_secret(config, env_name, cfg_path):
+    """Resolve a secret: environment variable first, then config path like 'email.password_app'."""
+    value = os.environ.get(env_name)
+    if value:
+        return value
+    node = config
+    for key in cfg_path.split("."):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(key)
+        if node is None:
+            return None
+    return node if isinstance(node, str) and node else None
 
 
 def load_state():
     if STATE_FILE.exists():
         with open(STATE_FILE) as f:
             return json.load(f)
-    return {"seen": {}, "last_run": None}
+    return {
+        "seen": {},
+        "off_market": {},
+        "run_history": [],
+        "failed_runs": 0,
+        "last_run": None,
+        "last_successful_run": None,
+        "market_history": {},
+    }
 
 
 def save_state(state):
@@ -53,6 +124,515 @@ def log(msg):
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
+
+# ---------------------------------------------------------------------------
+# Sold price fetching from Land Registry
+# ---------------------------------------------------------------------------
+
+def _load_sold_cache():
+    if SOLD_CACHE_FILE.exists():
+        try:
+            with open(SOLD_CACHE_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_sold_cache(cache):
+    with open(SOLD_CACHE_FILE, "w") as f:
+        json.dump(cache, f)
+
+
+def fetch_sold_prices(postcode_area):
+    """Fetch recent sold prices from Land Registry for a postcode area."""
+    cache = _load_sold_cache()
+    cache_key = postcode_area.upper()
+    if cache_key in cache:
+        cached = cache[cache_key]
+        cached_date = datetime.fromisoformat(cached["fetched"])
+        if (datetime.now() - cached_date).days < 7:
+            log(f"Sold prices cache hit for {postcode_area}")
+            return cached["data"]
+
+    url = "https://landregistry.data.gov.uk/app/ppd/ppd_data.csv"
+    today = datetime.now()
+    start_date = (today - timedelta(days=730)).strftime("%Y-%m-%d")
+    end_date = today.strftime("%Y-%m-%d")
+    params = {
+        "register": "England",
+        "start_date": start_date,
+        "end_date": end_date,
+        "postcode": postcode_area.upper(),
+    }
+
+    log(f"Fetching Land Registry sold prices for {postcode_area}...")
+    try:
+        r = SESSION.get(url, params=params, timeout=45)
+        r.raise_for_status()
+    except Exception as e:
+        log(f"Land Registry fetch failed: {e}")
+        return []
+
+    reader = csv.reader(io.StringIO(r.text))
+    header = next(reader, None)
+
+    type_map = {"T": "terraced", "S": "semi-detached", "D": "detached", "F": "flat", "O": "other"}
+    tenure_map = {"F": "freehold", "L": "leasehold"}
+
+    results = []
+    for row in reader:
+        if len(row) < 12:
+            continue
+        try:
+            price = int(row[1])
+        except (ValueError, IndexError):
+            continue
+        date = row[2] if len(row) > 2 else ""
+        prop_type = type_map.get(row[4], row[4])
+        tenure = tenure_map.get(row[6], row[6])
+        street = row[9] if len(row) > 9 else ""
+        town = row[11] if len(row) > 11 else ""
+
+        results.append({
+            "price": price,
+            "date": date,
+            "type": prop_type,
+            "tenure": tenure,
+            "street": street,
+            "town": town,
+        })
+
+    results = [r for r in results if r["date"] >= start_date]
+    log(f"Land Registry: {len(results)} recent sold prices ({start_date[:4]}+) for {postcode_area}")
+
+    cache[cache_key] = {
+        "fetched": datetime.now().isoformat(),
+        "data": results,
+    }
+    _save_sold_cache(cache)
+
+    return results
+
+
+def extract_postcode_area(address):
+    """Extract postcode area (e.g. 'WF15') from a full address string."""
+    match = re.search(r'(WF\d{1,2})\s*\w{0,3}', address, re.IGNORECASE)
+    if match:
+        return match.group(1).upper()
+    match = re.search(r'([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2})', address, re.IGNORECASE)
+    if match:
+        return match.group(1).split()[0].upper()
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Time-weighted sold price helpers
+# ---------------------------------------------------------------------------
+
+def _time_weight(date_str):
+    """Return weight for a sold price based on recency.
+
+    Last 6 months: 1.0, 6-12 months: 0.5, 12+ months: 0.25
+    """
+    try:
+        sale_date = datetime.strptime(date_str, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return 0.25
+    age_months = (datetime.now() - sale_date).days / 30
+    if age_months <= 6:
+        return 1.0
+    elif age_months <= 12:
+        return 0.5
+    else:
+        return 0.25
+
+
+def _weighted_median(sold_prices, prop_type=None):
+    """Calculate time-weighted median price from sold prices."""
+    filtered = sold_prices
+    if prop_type:
+        filtered = [s for s in sold_prices if s["type"] == prop_type]
+    if not filtered:
+        return 0
+
+    # Expand each price by its weight (round to nearest 0.5)
+    expanded = []
+    for s in filtered:
+        w = _time_weight(s["date"])
+        count = max(1, round(w * 2) / 2)  # At least 1 entry
+        expanded.extend([s["price"]] * int(count * 2))
+
+    return statistics.median(expanded) if expanded else 0
+
+
+def _weighted_mean(sold_prices, prop_type=None):
+    """Calculate time-weighted mean price from sold prices."""
+    filtered = sold_prices
+    if prop_type:
+        filtered = [s for s in sold_prices if s["type"] == prop_type]
+    if not filtered:
+        return 0
+
+    total_weight = 0
+    total_value = 0
+    for s in filtered:
+        w = _time_weight(s["date"])
+        total_value += s["price"] * w
+        total_weight += w
+
+    return total_value / total_weight if total_weight > 0 else 0
+
+
+# ---------------------------------------------------------------------------
+# Market temperature
+# ---------------------------------------------------------------------------
+
+def calculate_market_temperature(sold_prices):
+    """Determine if the local market is rising, stable, or cooling.
+
+    Compares weighted average of recent sales (last 6 months) vs older sales
+    (6-12 months). Returns dict with trend, change_pct, and detail.
+    """
+    recent = [s for s in sold_prices if _time_weight(s["date"]) == 1.0]
+    older = [s for s in sold_prices if _time_weight(s["date"]) == 0.5]
+
+    if not recent:
+        return {"trend": "stable", "change_pct": 0, "detail": "Insufficient data for trend"}
+    if not older:
+        return {"trend": "stable", "change_pct": 0, "detail": f"Only {len(recent)} recent sales — no trend yet"}
+
+    recent_avg = statistics.mean(s["price"] for s in recent)
+    older_avg = statistics.mean(s["price"] for s in older)
+
+    change_pct = ((recent_avg - older_avg) / older_avg) * 100 if older_avg > 0 else 0
+
+    if change_pct > 2:
+        trend = "rising"
+    elif change_pct < -2:
+        trend = "cooling"
+    else:
+        trend = "stable"
+
+    return {
+        "trend": trend,
+        "change_pct": round(change_pct, 1),
+        "detail": f"Prices {trend} ({change_pct:+.1f}% over 6 months)",
+        "recent_avg": round(recent_avg),
+        "older_avg": round(older_avg),
+        "recent_count": len(recent),
+        "older_count": len(older),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Negotiation guide
+# ---------------------------------------------------------------------------
+
+def calculate_negotiation(listing, sold_prices):
+    """Calculate a fair offer range for a listing.
+
+    Based on the time-weighted median sold price for matching property type.
+    """
+    type_key = "terraced" if "terraced" in listing["type"].lower() else "semi-detached"
+    median = _weighted_median(sold_prices, type_key)
+    if not median:
+        median = _weighted_median(sold_prices)
+    if not median:
+        return {"range_text": "Insufficient data", "low": 0, "high": 0, "vs_median": 0}
+
+    asking = listing["price"]
+    vs_median_pct = ((asking - median) / median) * 100 if median > 0 else 0
+
+    low = 0
+    high = 0
+    if asking <= median:
+        low = int(asking * 0.97)
+        high = int(asking)
+        text = f"Below average — strong offer &pound;{low:,}&ndash;&pound;{high:,}"
+        label = "strong"
+    elif vs_median_pct <= 5:
+        low = int(median * 0.95)
+        high = int(median)
+        text = f"Fair offer &pound;{low:,}&ndash;&pound;{high:,}"
+        label = "fair"
+    elif vs_median_pct <= 15:
+        low = int(median)
+        high = int(asking * 0.97)
+        text = f"Negotiate to &pound;{low:,}&ndash;&pound;{high:,}"
+        label = "negotiate"
+    else:
+        low = int(median * 0.95)
+        high = int(median * 0.95)
+        text = f"Consider offering &pound;{low:,}"
+        label = "overpriced"
+
+    return {
+        "range_text": text,
+        "low": low,
+        "high": high,
+        "vs_median": round(vs_median_pct, 1),
+        "median": median,
+        "label": label,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Confidence scoring (dynamic)
+# ---------------------------------------------------------------------------
+
+def _smooth_score(ratio, breakpoints):
+    """Map a ratio to 0-100 using linear interpolation between breakpoints.
+
+    breakpoints: list of (ratio, score) pairs sorted by ratio ascending.
+    Score decreases as ratio increases (cheaper = better).
+    """
+    if ratio <= breakpoints[0][0]:
+        return breakpoints[0][1]
+    for i in range(len(breakpoints) - 1):
+        r0, s0 = breakpoints[i]
+        r1, s1 = breakpoints[i + 1]
+        if ratio <= r1:
+            t = (ratio - r0) / (r1 - r0) if r1 != r0 else 0
+            return s0 + t * (s1 - s0)
+    return breakpoints[-1][1]
+
+
+def calculate_confidence(listing, sold_prices, all_listings):
+    """Calculate a buying confidence score (0-100) with dynamic factors.
+
+    Factors:
+      1. Asking price vs time-weighted area median (30%)
+      2. Price per sqft vs area average (25%, skipped if no sqft)
+      3. Price drop history (15%)
+      4. Smart listing age — age × price drop combo (10%)
+      5. Market context — vs current listings (20%)
+
+    Uses smooth linear interpolation (no hard cliff edges between scores).
+    When sq ft is unknown, its 25% weight is redistributed to other factors.
+    """
+    sqft = listing.get("sqft")
+    has_sqft = sqft and sqft > 0
+
+    # Base weights
+    w1 = 0.30   # area median (time-weighted)
+    w2 = 0.25   # sqft value
+    w3 = 0.15   # price drop
+    w4 = 0.10   # listing age (smart)
+    w5 = 0.20   # market context
+
+    if not has_sqft:
+        redistribute = w2
+        base = w1 + w3 + w4 + w5
+        w1 += redistribute * (w1 / base)
+        w3 += redistribute * (w3 / base)
+        w4 += redistribute * (w4 / base)
+        w5 += redistribute * (w5 / base)
+        w2 = 0.0
+
+    score = 0.0
+    breakdown = {}
+
+    # --- Factor 1: Asking price vs time-weighted area median ---
+    type_key = "terraced" if "terraced" in listing["type"].lower() else "semi-detached"
+    median_price = _weighted_median(sold_prices, type_key)
+    avg_price = _weighted_mean(sold_prices, type_key)
+    if not median_price:
+        median_price = _weighted_median(sold_prices)
+        avg_price = _weighted_mean(sold_prices)
+
+    if median_price:
+        ratio = listing["price"] / median_price if median_price > 0 else 1
+        factor1 = _smooth_score(ratio, [
+            (0.80, 100), (0.90, 85), (1.00, 65),
+            (1.10, 40),  (1.20, 15), (1.30, 0),
+        ])
+
+        breakdown["area_median"] = {
+            "score": factor1,
+            "detail": f"Asking is {ratio:.0%} of area median (&pound;{median_price:,.0f})",
+            "median": median_price,
+            "avg": avg_price,
+        }
+        score += factor1 * w1
+    else:
+        breakdown["area_median"] = {"score": 50, "detail": "No sold data available"}
+        score += 50 * w1
+
+    # --- Factor 2: Price per sqft vs area average ---
+    if has_sqft:
+        listing_sqft_price = listing["price"] / sqft
+        area_sqft_price = avg_price / 750 if avg_price else listing_sqft_price
+        sqft_ratio = listing_sqft_price / area_sqft_price if area_sqft_price > 0 else 1
+        factor2 = _smooth_score(sqft_ratio, [
+            (0.80, 100), (0.90, 85), (1.00, 65),
+            (1.10, 40),  (1.20, 15), (1.30, 0),
+        ])
+
+        breakdown["sqft_value"] = {
+            "score": factor2,
+            "detail": f"&pound;{listing_sqft_price:,.0f}/sqft vs area &pound;{area_sqft_price:,.0f}/sqft",
+        }
+        score += factor2 * w2
+    else:
+        breakdown["sqft_value"] = {
+            "score": None,
+            "detail": "Sq ft unknown &mdash; scored on price comparison only",
+        }
+
+    # --- Factor 3: Price drop history (repeat drops signal a motivated seller) ---
+    old_price = listing.get("old_price")
+    history = listing.get("price_history") or []
+    drop_count = 0
+    if len(history) >= 2:
+        for prev, curr in zip(history[:-1], history[1:]):
+            if (
+                isinstance(prev.get("price"), int)
+                and isinstance(curr.get("price"), int)
+                and curr["price"] < prev["price"]
+            ):
+                drop_count += 1
+    series_high = None
+    if history:
+        series_high = max(
+            (p.get("price") for p in history if isinstance(p.get("price"), int)),
+            default=None,
+        )
+
+    ref_price = old_price or series_high
+    has_drop = ref_price and ref_price > listing["price"]
+    if has_drop:
+        drop_pct = (ref_price - listing["price"]) / ref_price
+        factor3 = _smooth_score(drop_pct, [
+            (0.00, 50), (0.01, 60), (0.03, 70),
+            (0.05, 80), (0.08, 90), (0.10, 100),
+        ])
+        if drop_count >= 2:
+            factor3 = min(100, factor3 + 8 * min(drop_count - 1, 3))
+
+        detail = f"Dropped from &pound;{ref_price:,} (&minus;{drop_pct:.0%})"
+        if drop_count >= 2:
+            detail += f" &middot; {drop_count} drops in tracked history"
+        breakdown["price_drop"] = {"score": factor3, "detail": detail}
+        score += factor3 * w3
+    else:
+        breakdown["price_drop"] = {"score": 50, "detail": "No price drop recorded"}
+        score += 50 * w3
+
+    # --- Factor 4: Smart listing age (age × price drop combo) ---
+    first_seen = listing.get("first_seen")
+    has_age = first_seen is not None
+    if has_age:
+        days_listed = (datetime.now() - datetime.fromisoformat(first_seen)).days
+
+        if has_drop:
+            # With price drop: longer = more motivated
+            factor4 = _smooth_score(days_listed, [
+                (0, 30), (7, 40), (14, 55),
+                (30, 70), (45, 85), (60, 100),
+            ])
+        else:
+            # Without price drop: long time = stubborn seller
+            factor4 = _smooth_score(days_listed, [
+                (0, 30), (7, 40), (14, 55),
+                (30, 65), (45, 55), (60, 50),
+            ])
+
+        drop_note = " + price drop" if has_drop else ""
+        breakdown["listing_age"] = {
+            "score": factor4,
+            "detail": f"On market {days_listed} days{drop_note}",
+            "days": days_listed,
+        }
+        score += factor4 * w4
+    else:
+        breakdown["listing_age"] = {"score": 50, "detail": "Listing age unknown"}
+        score += 50 * w4
+
+    # --- Factor 5: Market context (vs current listings) ---
+    if all_listings and len(all_listings) >= 2:
+        all_prices = [l["price"] for l in all_listings]
+        market_avg = statistics.mean(all_prices)
+        market_min = min(all_prices)
+        market_max = max(all_prices)
+
+        ctx_ratio = listing["price"] / market_avg if market_avg > 0 else 1
+        factor5 = _smooth_score(ctx_ratio, [
+            (0.80, 100), (0.90, 85), (1.00, 65),
+            (1.10, 40),  (1.20, 15), (1.30, 0),
+        ])
+
+        breakdown["market_context"] = {
+            "score": factor5,
+            "detail": f"{ctx_ratio:.0%} of current avg (&pound;{market_avg:,.0f})",
+        }
+        score += factor5 * w5
+    else:
+        breakdown["market_context"] = {"score": 50, "detail": "Single listing — no comparison"}
+        score += 50 * w5
+
+    return round(score), breakdown
+
+
+def estimate_mortgage(price):
+    """Estimate monthly mortgage payment and stamp duty."""
+    deposit = min(DEPOSIT, price)
+    loan = price - deposit
+
+    monthly_rate = MORTGAGE_RATE / 12
+    n_payments = MORTGAGE_YEARS * 12
+    if monthly_rate > 0 and loan > 0:
+        monthly = loan * (monthly_rate * (1 + monthly_rate) ** n_payments) / (
+            (1 + monthly_rate) ** n_payments - 1
+        )
+    else:
+        monthly = 0
+
+    if price <= STAMP_DUTY_THRESHOLD:
+        stamp_duty = 0
+    else:
+        stamp_duty = (price - STAMP_DUTY_THRESHOLD) * 0.05
+
+    legal_survey = 2500
+    total_upfront = deposit + stamp_duty + legal_survey
+
+    return {
+        "deposit": deposit,
+        "loan": loan,
+        "monthly": round(monthly),
+        "stamp_duty": round(stamp_duty),
+        "legal_survey": legal_survey,
+        "total_upfront": round(total_upfront),
+    }
+
+
+def find_street_comparables(listing, sold_prices, limit=5):
+    """Find recent same-type sold prices on or near the listing's street.
+
+    Street names are matched case-insensitively in either direction (listing
+    address first token vs Land Registry street field), so 'Firthcliffe Road'
+    matches 'FIRTHCLIFFE ROAD'. Returns the most recent up to ``limit``.
+    """
+    street = listing["address"].split(",")[0].strip().lower()
+    if not street or len(street) < 3:
+        return []
+    ptype = "terraced" if "terraced" in listing["type"].lower() else "semi-detached"
+
+    matches = []
+    for s in sold_prices:
+        s_street = (s.get("street") or "").strip().lower()
+        if not s_street:
+            continue
+        if street in s_street or s_street in street:
+            if s["type"] == ptype:
+                matches.append(s)
+    matches.sort(key=lambda s: s["date"], reverse=True)
+    return matches[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Property listing fetching
+# ---------------------------------------------------------------------------
 
 def fetch_ontemarket(config):
     """Fetch listings from OnTheMarket search results."""
@@ -86,7 +666,6 @@ def fetch_ontemarket(config):
 
 def _parse_otm_listing(pid, html):
     """Parse a single OTM listing from its HTML snippet."""
-    # Price
     price_match = re.search(r'>([\u00a3\xa3][\d,]+)</a>', html)
     if not price_match:
         return None
@@ -96,11 +675,9 @@ def _parse_otm_listing(pid, html):
     except ValueError:
         return None
 
-    # Address
     addr_match = re.search(r'<address[^>]*><span>([^<]+)</span>', html)
     address = addr_match.group(1).strip() if addr_match else ""
 
-    # Bedrooms and property type from alt text on image
     alt_match = re.search(r'alt="(\d+)\s+bedroom\s+([^"]+?)\s+for sale', html, re.IGNORECASE)
     if alt_match:
         beds = int(alt_match.group(1))
@@ -110,11 +687,9 @@ def _parse_otm_listing(pid, html):
         beds = int(beds_match.group(1)) if beds_match else 0
         prop_type = "unknown"
 
-    # Agent name
     agent_match = re.search(r'font-bold text-white font-normal">\s*([^<]+)', html)
     agent = agent_match.group(1).strip() if agent_match else "Unknown"
 
-    # First image URL from srcSet or src
     img_match = re.search(
         r'srcSet="(https://media\.onthemarket\.com/properties/[^"]+\.webp)', html
     )
@@ -139,11 +714,7 @@ def _parse_otm_listing(pid, html):
 
 
 def fetch_barkers(config):
-    """Fetch listings from Barkers Estate Agents.
-
-    Barkers' search doesn't filter reliably via URL params, so we scrape
-    all listings and filter client-side for our target area.
-    """
+    """Fetch listings from Barkers Estate Agents."""
     listings = []
     start = 0
     max_pages = 10
@@ -266,7 +837,6 @@ def enrich_with_sqft(listings):
     for listing in listings:
         if listing["source"] != "OnTheMarket":
             continue
-        # Extract OTM property ID from listing ID (format: "otm-12345678")
         pid = listing["id"].replace("otm-", "")
         try:
             r = SESSION.get(
@@ -276,7 +846,6 @@ def enrich_with_sqft(listings):
                 sqft_match = re.search(r'"minimumAreaSqFt":(\d+)', r.text)
                 if sqft_match:
                     listing["sqft"] = int(sqft_match.group(1))
-                # Also try to grab sqm
                 sqm_match = re.search(r'"minimumAreaSqM":(\d+)', r.text)
                 if sqm_match:
                     listing["sqm"] = int(sqm_match.group(1))
@@ -291,13 +860,14 @@ def find_alerts(current_listings, state):
     """Compare current listings against state to find new and price-dropped."""
     new_listings = []
     price_drops = []
+    seen = state.get("seen", {})
 
     for listing in current_listings:
         lid = listing["id"]
-        if lid not in state["seen"]:
+        if lid not in seen:
             new_listings.append(listing)
-        elif listing["price"] < state["seen"][lid]["price"]:
-            price_drops.append({**listing, "old_price": state["seen"][lid]["price"]})
+        elif listing["price"] < seen[lid]["price"]:
+            price_drops.append({**listing, "old_price": seen[lid]["price"]})
 
     return new_listings, price_drops
 
@@ -305,9 +875,10 @@ def find_alerts(current_listings, state):
 def send_email(config, new_listings, price_drops):
     """Send a single email containing all alerts."""
     email_cfg = config["email"]
+    password = get_secret(config, "GMAIL_APP_PASSWORD", "email.password_app")
 
-    if not email_cfg.get("sender") or email_cfg["sender"] == "YOUR_GMAIL@gmail.com":
-        log("Email not configured - skipping send (update config.json)")
+    if not email_cfg.get("sender") or email_cfg["sender"] == "YOUR_GMAIL@gmail.com" or not password:
+        log("Email not configured - skipping send (set GMAIL_APP_PASSWORD or config.local.json)")
         return None
 
     lines = []
@@ -321,7 +892,8 @@ def send_email(config, new_listings, price_drops):
         for i, l in enumerate(new_listings, 1):
             lines.append("")
             size = f" | {l['sqft']} sq ft" if l.get("sqft") else ""
-            lines.append(f"{i}. \xa3{l['price']:,} | {l['bedrooms']}-bed {l['type'].title()}{size}")
+            conf = f" | Confidence: {l.get('confidence', {}).get('score', '?')}/100" if l.get("confidence") else ""
+            lines.append(f"{i}. \xa3{l['price']:,} | {l['bedrooms']}-bed {l['type'].title()}{size}{conf}")
             lines.append(f"   {l['address']}")
             lines.append(f"   Agent: {l['agent']}")
             lines.append(f"   {l['url']}")
@@ -351,37 +923,306 @@ def send_email(config, new_listings, price_drops):
 
     with smtplib.SMTP(email_cfg["smtp_server"], email_cfg["smtp_port"]) as server:
         server.starttls()
-        server.login(email_cfg["sender"], email_cfg["password_app"])
+        server.login(email_cfg["sender"], password)
         server.send_message(msg)
 
     return subject
 
 
-def generate_html(listings):
-    """Generate a self-contained HTML dashboard sorted by sq ft."""
-    # Sort: sqft first (biggest first), then no-sqft at bottom
+def send_telegram_alert(config, new_listings, price_drops):
+    """Send alerts via Telegram Bot API."""
+    import urllib.request
+    import urllib.parse
+
+    tg_cfg = config.get("telegram", {})
+    token = get_secret(config, "TELEGRAM_BOT_TOKEN", "telegram.bot_token")
+    chat_id = tg_cfg.get("chat_id")
+
+    if not token or not chat_id:
+        log("Telegram not configured - skipping (add telegram section to config.json)")
+        return False
+
+    lines = []
+    total = len(new_listings) + len(price_drops)
+    lines.append(f"🏠 PROPERTY ALERT — {total} item(s)")
+    lines.append("Heckmondwike + 2mi | 3-bed terraced/semi-detached")
+    lines.append("")
+
+    if new_listings:
+        lines.append(f"📢 {len(new_listings)} NEW LISTING(S)")
+        for i, l in enumerate(new_listings, 1):
+            lines.append("")
+            size = f" | {l['sqft']} sqft" if l.get("sqft") else ""
+            conf = f" | Conf: {l.get('confidence', {}).get('score', '?')}/100" if l.get("confidence") else ""
+            lines.append(f"{i}. £{l['price']:,} | {l['bedrooms']}-bed {l['type'].title()}{size}{conf}")
+            lines.append(f"   {l['address']}")
+            lines.append(f"   {l['agent']}")
+            lines.append(f"   {l['url']}")
+
+    if price_drops:
+        if new_listings:
+            lines.append("")
+        lines.append(f"📉 {len(price_drops)} PRICE DROP(S)")
+        for i, l in enumerate(price_drops, 1):
+            lines.append("")
+            size = f" | {l['sqft']} sqft" if l.get("sqft") else ""
+            lines.append(
+                f"{i}. £{l['old_price']:,} → £{l['price']:,} "
+                f"| {l['bedrooms']}-bed {l['type'].title()}{size}"
+            )
+            lines.append(f"   {l['address']}")
+            lines.append(f"   {l['agent']}")
+            lines.append(f"   {l['url']}")
+
+    text = "\n".join(lines)
+
+    # Telegram has 4096 byte limit per message
+    if len(text.encode("utf-8")) > 4096:
+        # Split into multiple messages
+        parts = []
+        current = ""
+        for line in lines:
+            test = f"{current}\n{line}" if current else line
+            if len(test.encode("utf-8")) > 4000:
+                if current:
+                    parts.append(current)
+                current = line
+            else:
+                current = test
+        if current:
+            parts.append(current)
+    else:
+        parts = [text]
+
+    for part in parts:
+        _telegram_send_message(token, chat_id, part)
+
+    log(f"Telegram alert sent ({len(parts)} message(s))")
+    return True
+
+
+def _telegram_send_message(token, chat_id, text):
+    """Send a single Telegram message via the Bot API. Returns True on success."""
+    import urllib.parse
+    import urllib.request
+
+    data = urllib.parse.urlencode({
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+    }).encode()
+    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+            if not result.get("ok"):
+                log(f"Telegram API error: {result}")
+                return False
+    except Exception as e:
+        log(f"Telegram send error: {e}")
+        return False
+    return True
+
+
+def send_watchdog_alert(config, failures, failed_runs):
+    """Notify via Telegram when the pipeline keeps degrading."""
+    token = get_secret(config, "TELEGRAM_BOT_TOKEN", "telegram.bot_token")
+    chat_id = (config.get("telegram") or {}).get("chat_id")
+    if not token or not chat_id:
+        log("WATCHDOG: telegram not configured - skipping watchdog alert")
+        return False
+    text = (
+        "⚠️ <b>PROPERTY WATCH PROBLEM</b>\n"
+        f"{failed_runs} consecutive degraded run(s).\n"
+        "Issues:\n" + "\n".join(f"• {f}" for f in failures)
+    )
+    ok = _telegram_send_message(token, chat_id, text)
+    log(f"WATCHDOG alert {'sent' if ok else 'failed'} ({failed_runs} consecutive failures)")
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# HTML generation
+# ---------------------------------------------------------------------------
+
+def _sparkline(price_history):
+    """Build a small inline SVG price-history sparkline for a listing card."""
+    if not price_history:
+        return ""
+    entries = [
+        {"price": p["price"], "date": p["date"]}
+        for p in price_history
+        if isinstance(p.get("price"), int)
+    ]
+    if len(entries) < 2:
+        return ""
+    w, h = 110, 26
+    prices = [e["price"] for e in entries]
+    low, high = min(prices), max(prices)
+    rng = max(high - low, 1)
+    n = len(prices)
+    pts = []
+    for i, price in enumerate(prices):
+        x = 1 + round((i * (w - 4)) / (n - 1))
+        y = round((h - 4) - ((price - low) / rng) * (h - 8))
+        pts.append(f"{x},{y}")
+    color = "#059669" if prices[-1] <= prices[0] else "#d97706"
+    title = " &middot; ".join(
+        f"{e['date'][:10]}: &pound;{e['price']:,}" for e in entries
+    )[:200]
+    return (
+        f'<svg class="spark" width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
+        f'role="img" aria-label="Price history: {title}">'
+        f'<polyline fill="none" stroke="{color}" stroke-width="2" '
+        f'stroke-linejoin="round" points="{" ".join(pts)}"/>'
+        f"</svg>"
+    )
+
+
+def _off_market_html(state):
+    """Render a 'recently off market' section from state (most recent first)."""
+    if not state:
+        return ""
+    entries = state.get("off_market") or {}
+    if not entries:
+        return ""
+    items = sorted(
+        entries.items(), key=lambda kv: kv[1].get("last_seen") or "", reverse=True
+    )[:10]
+    cards = []
+    for _lid, e in items:
+        days = ""
+        if e.get("first_seen") and e.get("last_seen"):
+            try:
+                d1 = datetime.fromisoformat(e["first_seen"])
+                d2 = datetime.fromisoformat(e["last_seen"])
+                days = f"{max((d2 - d1).days, 0)} days on market"
+            except ValueError:
+                days = ""
+        last_seen = ""
+        if e.get("last_seen"):
+            try:
+                last_seen = datetime.fromisoformat(e["last_seen"]).strftime("%d %b")
+            except ValueError:
+                last_seen = ""
+        price_txt = f"&pound;{e['price']:,}" if e.get("price") else "price unknown"
+        meta = price_txt
+        if e.get("source"):
+            meta += f" &middot; {e['source']}"
+        cards.append(
+            '<div class="off-card">'
+            f'<div class="off-addr">{e.get("address", "Unknown")}</div>'
+            f'<div class="off-meta">{meta}</div>'
+            f'<div class="off-days">{days}{" &middot; last seen " + last_seen if last_seen else ""}</div>'
+            "</div>"
+        )
+    return (
+        '<div class="off-market"><h2>&#9203; Recently off market</h2>'
+        f'<div class="off-market-grid">{"".join(cards)}</div></div>'
+    )
+
+
+def _run_summary_html(state):
+    """Render last-run / source / health summary for the dashboard footer."""
+    if not state:
+        return ""
+    parts = []
+    last_run = state.get("last_run") or state.get("last_successful_run")
+    if last_run:
+        try:
+            dt = datetime.fromisoformat(last_run)
+            age_min = (datetime.now() - dt).total_seconds() / 60
+            flag = "" if age_min < 180 else ' <span style="color:#dc2626">(STALE)</span>'
+            parts.append(f"Last run {dt.strftime('%d %b %Y, %H:%M')}{flag}")
+        except ValueError:
+            pass
+    history = state.get("run_history") or []
+    if history and history[-1].get("sources"):
+        sources = history[-1]["sources"]
+        label_map = {"ontemarket": "OnTheMarket", "barkers": "Barkers"}
+        parts.append(
+            "Sources: "
+            + " &middot; ".join(f"{label_map.get(k, k.title())}: {v}" for k, v in sources.items())
+        )
+    failed = state.get("failed_runs") or 0
+    if failed:
+        parts.append(f'<span style="color:#dc2626">&#9888;&#65039; {failed} consecutive degraded run(s)</span>')
+    return " &middot; ".join(parts)
+
+
+def _confidence_badge(score):
+    """Return CSS class and label for a confidence score."""
+    if score >= 80:
+        return "great", f"{score}", "Great Deal"
+    elif score >= 60:
+        return "fair", f"{score}", "Fair Price"
+    elif score >= 40:
+        return "over", f"{score}", "Overpriced"
+    else:
+        return "bad", f"{score}", "Way Over"
+
+
+def generate_html(listings, market_temps, state=None):
+    """Generate a self-contained HTML dashboard with dynamic ratings."""
     sorted_listings = sorted(
         listings,
-        key=lambda l: (l.get("sqft") is not None, l.get("sqft") or 0),
+        key=lambda l: (
+            l.get("confidence", {}).get("score", 0),
+            l.get("sqft") or 0,
+        ),
         reverse=True,
     )
 
     now = datetime.now().strftime("%d %b %Y, %H:%M")
     count = len(sorted_listings)
 
+    # Assign rank badges
+    for rank, l in enumerate(sorted_listings, 1):
+        l["rank"] = rank
+
+    # Market temperature HTML
+    temp_html = ""
+    if market_temps:
+        temp_items = []
+        for area, temp in market_temps.items():
+            trend_icon = {"rising": "&#9650;", "cooling": "&#9660;", "stable": "&#9679;"}.get(temp["trend"], "&#9679;")
+            trend_class = temp["trend"]
+            temp_items.append(f'<span class="temp-item {trend_class}">{area}: {trend_icon} {temp["trend"].title()} ({temp["change_pct"]:+.1f}%)</span>')
+        temp_html = f'<div class="market-temp">{"".join(temp_items)}</div>'
+
     cards_html = ""
     for i, l in enumerate(sorted_listings):
         sqft = l.get("sqft")
         sqm = l.get("sqm")
+        conf = l.get("confidence", {})
+        mortgage = l.get("mortgage", {})
+        negotiation = l.get("negotiation", {})
+        conf_score = conf.get("score", 0)
+        badge_class, badge_text, badge_label = _confidence_badge(conf_score)
+        rank = l.get("rank", i + 1)
+
+        # Rank badge with gap
+        top_score = sorted_listings[0].get("confidence", {}).get("score", 0) if sorted_listings else 0
+        gap = top_score - conf_score if rank > 1 else 0
+        rank_class = "rank-best" if rank == 1 else "rank"
+        rank_text = f"#{rank}" if rank > 1 else "&#9733; #1"
+        if rank > 1:
+            rank_text = f"#{rank} <span class='rank-gap'>(+{gap} pts behind)</span>"
+        rank_label = "Best Value" if rank == 1 else f"#{rank} of {count}"
+        spark = _sparkline(l.get("price_history"))
+
+        # Size badge
         if sqft:
             size_badge = f'<span class="size">{sqft} sq ft ({sqm} m&sup2;)</span>'
         else:
             size_badge = '<span class="size unknown">Size unknown</span>'
 
+        # Image
         img_html = ""
         if l.get("image"):
             img_html = f'<img src="{l["image"]}" alt="{l["address"]}" loading="lazy" />'
 
+        # Price drop
         price_drop_html = ""
         if "old_price" in l:
             price_drop_html = (
@@ -389,87 +1230,234 @@ def generate_html(listings):
                 f'<span class="drop-arrow">&darr;</span> '
             )
 
+        # Tag
         tag = ""
         if "old_price" in l:
             tag = '<span class="tag drop">PRICE DROP</span>'
+        elif l.get("relisted"):
+            tag = '<span class="tag relisted">RE-LISTED</span>'
         elif l["id"] not in _seen_before:
             tag = '<span class="tag new">NEW</span>'
 
+        # Mortgage info (simplified)
+        mortgage_html = ""
+        if mortgage:
+            mortgage_html = f"""
+                <div class="mortgage">
+                    <div class="mortgage-row"><span>Monthly payment</span><span class="mortgage-val">&pound;{mortgage['monthly']:,}/mo</span></div>
+                    <div class="mortgage-row"><span>Deposit</span><span>&pound;{mortgage['deposit']:,}</span></div>
+                </div>"""
+
+        # Negotiation guide
+        neg_html = ""
+        if negotiation and negotiation.get("range_text") and negotiation["range_text"] != "Insufficient data":
+            neg_class = negotiation.get("label", "fair")
+            neg_html = f"""
+                <div class="negotiation">
+                    <div class="neg-title">Negotiation Guide</div>
+                    <div class="neg-text {neg_class}">{negotiation['range_text']}</div>
+                    <div class="neg-detail">Area median: &pound;{negotiation.get('median', 0):,} &middot; Asking is {negotiation.get('vs_median', 0):+.1f}% vs median</div>
+                </div>"""
+
+        # Street-level sold comparables (informational)
+        comps = l.get("comparables") or []
+        if comps:
+            comp_prices = " &middot; ".join(f"&pound;{c['price']:,}" for c in comps[:5])
+            conf.setdefault("breakdown", {})["street_comparables"] = {
+                "score": None,
+                "detail": f"{len(comps)} comparable sale{'' if len(comps) == 1 else 's'} on/near this street: {comp_prices}",
+            }
+
+        # Confidence breakdown
+        breakdown_html = ""
+        if conf.get("breakdown"):
+            items = []
+            for key, val in conf["breakdown"].items():
+                label = {
+                    "area_median": "vs Area Sold Prices",
+                    "sqft_value": "Price per sqft",
+                    "price_drop": "Price Drop",
+                    "listing_age": "Listing Age",
+                    "market_context": "Market Context",
+                    "street_comparables": "Street Comparables",
+                }.get(key, key)
+                s = val["score"]
+                if s is None:
+                    items.append(f'<div class="factor"><span class="factor-label">{label}</span><span class="factor-detail">{val["detail"]}</span></div>')
+                else:
+                    bar_width = min(s, 100)
+                    items.append(f'<div class="factor"><span class="factor-label">{label}</span><span class="factor-detail">{val["detail"]}</span><div class="factor-bar"><div class="factor-fill" style="width:{bar_width}%"></div></div></div>')
+            breakdown_html = f"""
+                <details class="details-toggle">
+                    <summary>Show full breakdown</summary>
+                    <div class="breakdown">
+                        {neg_html}
+                        {''.join(items)}
+                    </div>
+                </details>"""
+        elif neg_html:
+            breakdown_html = neg_html
+
+        featured = ' featured' if rank == 1 else ''
         cards_html += f"""
-        <a href="{l['url']}" target="_blank" rel="noopener" class="card">
+        <div class="card{featured}">
             {tag}
-            <div class="img-wrap">
-                {img_html}
-            </div>
-            <div class="info">
-                <div class="price-row">
-                    {price_drop_html}<span class="price">&pound;{l['price']:,}</span>
+            <a href="{l['url']}" target="_blank" rel="noopener" class="card-link">
+                <div class="img-wrap">
+                    {img_html}
                 </div>
-                <div class="meta">
-                    {l['bedrooms']} bed &middot; {l['type'].title()} &middot; {l['agent']}
+                <div class="info">
+                    <div class="price-row">
+                        <div>{price_drop_html}<span class="price">&pound;{l['price']:,}</span>{spark}</div>
+                        <div class="rating-row">
+                            <span class="confidence {badge_class}">{badge_text}</span>
+                            <span class="confidence-label {badge_class}">{badge_label}</span>
+                            <span class="{rank_class}">{rank_text}</span>
+                        </div>
+                    </div>
+                    <div class="meta">
+                        {l['bedrooms']} bed &middot; {l['type'].title()} &middot; {l['agent']}
+                    </div>
+                    <div class="address">{l['address']}</div>
+                    <div class="details">
+                        {size_badge}
+                    </div>
                 </div>
-                <div class="address">{l['address']}</div>
-                <div class="details">
-                    {size_badge}
-                </div>
-            </div>
-        </a>
+            </a>
+            {breakdown_html}
+        </div>
 """
 
     if not cards_html:
-        cards_html = '<div class="empty">No matching properties found right now. Next check in 15 minutes.</div>'
+        cards_html = '<div class="empty">No matching properties found right now. Next check in 30 minutes.</div>'
+
+    # Summary stats
+    scores = [l.get("confidence", {}).get("score", 0) for l in sorted_listings]
+    avg_score = statistics.mean(scores) if scores else 0
+    great_count = sum(1 for s in scores if s >= 80)
+    fair_count = sum(1 for s in scores if 60 <= s < 80)
+    over_count = sum(1 for s in scores if s < 60)
+
+    off_html = _off_market_html(state)
+    run_summary_html = _run_summary_html(state)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta http-equiv="refresh" content="900" />
+<meta http-equiv="refresh" content="1800" />
 <title>Property Watch - Heckmondwike</title>
 <style>
-* {{ margin:0; padding:0; box-sizing:border-box; }}
-body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }}
-.header {{ padding: 24px 20px 16px; text-align: center; border-bottom: 1px solid #1e293b; }}
-.header h1 {{ font-size: 20px; font-weight: 600; color: #f8fafc; }}
-.header .sub {{ font-size: 13px; color: #64748b; margin-top: 4px; }}
-.header .count {{ font-size: 14px; color: #38bdf8; margin-top: 6px; font-weight: 500; }}
-.grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; padding: 20px; max-width: 1200px; margin: 0 auto; }}
-.card {{ display: block; background: #1e293b; border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.15s, box-shadow 0.15s; position: relative; }}
-.card:hover {{ transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }}
-.img-wrap {{ width: 100%; height: 200px; overflow: hidden; background: #334155; }}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #fafaf9; color: #1c1917; min-height: 100vh; }}
+.header {{ padding: 28px 24px 16px; border-bottom: 1px solid #e7e5e4; }}
+.header h1 {{ font-size: 22px; font-weight: 700; color: #1c1917; letter-spacing: -0.3px; }}
+.header .sub {{ font-size: 13px; color: #78716c; margin-top: 3px; }}
+.header .count {{ font-size: 13px; color: #059669; margin-top: 4px; font-weight: 500; }}
+.market-temp {{ display: flex; justify-content: center; gap: 10px; padding: 10px 24px; flex-wrap: wrap; border-bottom: 1px solid #e7e5e4; }}
+.temp-item {{ font-size: 12px; padding: 4px 12px; border-radius: 20px; font-weight: 500; }}
+.temp-item.rising {{ background: #ecfdf5; color: #059669; }}
+.temp-item.stable {{ background: #f0fdfa; color: #0d9488; }}
+.temp-item.cooling {{ background: #fffbeb; color: #d97706; }}
+.summary {{ display: flex; justify-content: center; gap: 20px; padding: 12px 24px; border-bottom: 1px solid #e7e5e4; flex-wrap: wrap; font-size: 13px; color: #78716c; }}
+.summary .num {{ font-weight: 700; }}
+.summary .great .num {{ color: #059669; }}
+.summary .fair .num {{ color: #0d9488; }}
+.summary .over .num {{ color: #d97706; }}
+.grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 20px 24px; max-width: 1200px; margin: 0 auto; }}
+.card {{ background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e7e5e4; transition: box-shadow 0.2s; position: relative; }}
+.card:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,0.06); }}
+.card.featured {{ border-color: #059669; border-width: 1.5px; }}
+.card-link {{ display: block; text-decoration: none; color: inherit; }}
+.img-wrap {{ width: 100%; height: 180px; overflow: hidden; background: #d6d3d1; }}
 .img-wrap img {{ width: 100%; height: 100%; object-fit: cover; }}
-.info {{ padding: 16px; }}
-.price-row {{ display: flex; align-items: center; gap: 8px; }}
-.price {{ font-size: 22px; font-weight: 700; color: #f8fafc; }}
-.old-price {{ font-size: 14px; color: #94a3b8; text-decoration: line-through; }}
-.drop-arrow {{ color: #22c55e; font-size: 14px; }}
-.meta {{ font-size: 13px; color: #94a3b8; margin-top: 6px; }}
-.address {{ font-size: 14px; color: #cbd5e1; margin-top: 6px; line-height: 1.4; }}
-.details {{ margin-top: 10px; }}
-.size {{ display: inline-block; background: #334155; color: #38bdf8; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; }}
-.size.unknown {{ color: #64748b; }}
-.tag {{ position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; z-index: 2; }}
-.tag.new {{ background: #22c55e; color: #fff; }}
-.tag.drop {{ background: #f59e0b; color: #fff; }}
-.empty {{ text-align: center; padding: 60px 20px; color: #64748b; font-size: 15px; }}
-.footer {{ text-align: center; padding: 20px; color: #475569; font-size: 12px; border-top: 1px solid #1e293b; }}
-@media (max-width: 480px) {{
-    .grid {{ grid-template-columns: 1fr; padding: 12px; gap: 12px; }}
-    .img-wrap {{ height: 180px; }}
+.info {{ padding: 16px 18px 14px; }}
+.price-row {{ display: flex; align-items: center; justify-content: space-between; gap: 8px; }}
+.price {{ font-size: 26px; font-weight: 700; color: #1c1917; letter-spacing: -0.5px; }}
+.old-price {{ font-size: 14px; color: #a8a29e; text-decoration: line-through; }}
+.drop-arrow {{ color: #059669; font-size: 14px; margin-left: 4px; }}
+.rating-row {{ display: flex; align-items: center; gap: 6px; }}
+.confidence {{ padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }}
+.confidence.great {{ background: #ecfdf5; color: #059669; }}
+.confidence.fair {{ background: #f0fdfa; color: #0d9488; }}
+.confidence.over {{ background: #fffbeb; color: #d97706; }}
+.confidence.bad {{ background: #fef2f2; color: #dc2626; }}
+.confidence-label {{ font-size: 11px; font-weight: 500; }}
+.confidence-label.great {{ color: #059669; }}
+.confidence-label.fair {{ color: #0d9488; }}
+.confidence-label.over {{ color: #d97706; }}
+.confidence-label.bad {{ color: #dc2626; }}
+.rank-best {{ background: #ecfdf5; color: #059669; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #a7f3d0; }}
+.rank {{ background: #f5f5f4; color: #78716c; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #e7e5e4; }}
+.rank-gap {{ font-size: 11px; font-weight: 400; color: #a8a29e; }}
+.meta {{ font-size: 13px; color: #78716c; margin-top: 10px; }}
+.address {{ font-size: 15px; color: #1c1917; margin-top: 4px; font-weight: 500; line-height: 1.4; }}
+.details {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }}
+.size {{ display: inline-block; background: #f5f5f4; color: #57534e; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; border: 1px solid #e7e5e4; }}
+.size.unknown {{ color: #a8a29e; }}
+.tag {{ position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; z-index: 2; }}
+.tag.new {{ background: #059669; color: #fff; }}
+.tag.drop {{ background: #d97706; color: #fff; }}
+.tag.relisted {{ background: #6366f1; color: #fff; }}
+.spark {{ display: block; margin-top: 4px; }}
+.off-market {{ max-width: 1200px; margin: 20px auto 0; padding: 0 24px; }}
+.off-market h2 {{ font-size: 15px; font-weight: 600; color: #57534e; margin-bottom: 10px; }}
+.off-market-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }}
+.off-card {{ background: #fff; border: 1px solid #e7e5e4; border-radius: 8px; padding: 10px 14px; }}
+.off-addr {{ font-size: 13px; font-weight: 500; color: #1c1917; }}
+.off-meta {{ font-size: 12px; color: #a8a29e; margin-top: 2px; }}
+.off-days {{ font-size: 11px; color: #78716c; margin-top: 2px; }}
+.mortgage {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }}
+.mortgage-row {{ display: flex; justify-content: space-between; font-size: 13px; color: #78716c; padding: 2px 0; }}
+.mortgage-val {{ color: #1c1917; font-weight: 600; }}
+.details-toggle {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; }}
+.details-toggle summary {{ font-size: 12px; color: #78716c; cursor: pointer; font-weight: 500; }}
+.details-toggle summary:hover {{ color: #1c1917; }}
+.negotiation {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }}
+.neg-title {{ font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #a8a29e; margin-bottom: 4px; }}
+.neg-text {{ font-size: 14px; font-weight: 600; }}
+.neg-text.strong {{ color: #059669; }}
+.neg-text.fair {{ color: #0d9488; }}
+.neg-text.negotiate {{ color: #d97706; }}
+.neg-text.overpriced {{ color: #dc2626; }}
+.neg-detail {{ font-size: 11px; color: #a8a29e; margin-top: 2px; }}
+.breakdown {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }}
+.breakdown-title {{ font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #a8a29e; margin-bottom: 8px; }}
+.factor {{ margin-bottom: 8px; }}
+.factor-label {{ font-size: 12px; color: #57534e; font-weight: 500; }}
+.factor-detail {{ font-size: 11px; color: #a8a29e; margin-top: 1px; }}
+.factor-bar {{ height: 4px; background: #e7e5e4; border-radius: 2px; margin-top: 4px; overflow: hidden; }}
+.factor-fill {{ height: 100%; background: #059669; border-radius: 2px; }}
+.empty {{ text-align: center; padding: 60px 24px; color: #a8a29e; font-size: 15px; }}
+.footer {{ text-align: center; padding: 20px 24px; color: #a8a29e; font-size: 12px; border-top: 1px solid #e7e5e4; }}
+@media (max-width: 768px) {{
+    .grid {{ grid-template-columns: 1fr; padding: 16px; gap: 14px; }}
+    .img-wrap {{ height: 160px; }}
+    .price {{ font-size: 22px; }}
 }}
 </style>
 </head>
 <body>
 <div class="header">
-    <h1>Property Watch &mdash; Heckmondwike</h1>
+    <h1>Property Watch</h1>
     <div class="sub">3-bed terraced/semi-detached &middot; &pound;120k&ndash;&pound;220k &middot; 2mi radius</div>
-    <div class="count">{count} matching {properties(count)}</div>
+    <div class="count">{count} matching {properties(count)} &middot; Avg score: {avg_score:.0f}/100</div>
+</div>
+{temp_html}
+<div class="summary">
+    <span class="great"><span class="num">{great_count}</span> Great Deals</span>
+    <span class="fair"><span class="num">{fair_count}</span> Fair Price</span>
+    <span class="over"><span class="num">{over_count}</span> Overpriced</span>
 </div>
 <div class="grid">
 {cards_html}
 </div>
+{off_html}
 <div class="footer">
-    Updated {now} &middot; Auto-refreshes every 15 minutes &middot; Sorted by size (largest first)
+    Updated {now} &middot; Auto-refreshes every 30 minutes &middot; Dynamic scoring with market context &middot; {run_summary_html}<br/>
+    Sold prices from HM Land Registry &middot; Mortgage: &pound;{DEPOSIT:,} deposit at {MORTGAGE_RATE:.1%} over {MORTGAGE_YEARS} years
 </div>
 </body>
 </html>"""
@@ -485,81 +1473,375 @@ def properties(n):
 _seen_before = set()
 
 
-def main():
+def push_to_github():
+    """Push updated index.html to GitHub Pages."""
+    try:
+        subprocess.run(
+            ["git", "add", "index.html"],
+            cwd=str(SCRIPT_DIR),
+            capture_output=True,
+            timeout=10,
+        )
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--quiet", "index.html"],
+            cwd=str(SCRIPT_DIR),
+            capture_output=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            log("No HTML changes to push")
+            return
+
+        subprocess.run(
+            ["git", "commit", "-m", f"Update dashboard {datetime.now().strftime('%Y-%m-%d %H:%M')}"],
+            cwd=str(SCRIPT_DIR),
+            capture_output=True,
+            timeout=10,
+        )
+        result = subprocess.run(
+            ["git", "push", "origin", "master"],
+            cwd=str(SCRIPT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            log("Pushed to GitHub Pages")
+        else:
+            log(f"Git push failed: {result.stderr[:200]}")
+    except Exception as e:
+        log(f"GitHub push error: {e}")
+
+
+def _collect_raw_listings(config):
+    """Fetch from all configured sources and merge manual listings.
+
+    Returns (all_listings, source_counts) where source_counts maps each
+    configured source to the number of raw listings parsed (0 on error).
+    """
+    source_counts = {}
+    all_listings = []
+    for source in config.get("sources", []):
+        try:
+            if source == "ontemarket":
+                fetched = fetch_ontemarket(config)
+            elif source == "barkers":
+                fetched = fetch_barkers(config)
+            else:
+                log(f"Unknown source skipped: {source}")
+                continue
+            source_counts[source] = len(fetched)
+            all_listings.extend(fetched)
+        except Exception as e:
+            source_counts[source] = 0
+            log(f"ERROR fetching {source}: {e}")
+
+    for ml in config.get("manual_listings", []):
+        all_listings.append({
+            "id": ml["id"],
+            "source": ml.get("source", "Manual"),
+            "address": ml["address"],
+            "price": ml["price"],
+            "bedrooms": ml.get("bedrooms", 0),
+            "type": ml.get("type", "unknown"),
+            "url": ml.get("url", ""),
+            "agent": ml.get("agent", "Unknown"),
+            "image": ml.get("image", ""),
+            "sqft": ml.get("sqft"),
+        })
+
+    return all_listings, source_counts
+
+
+def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings):
+    """Attach scoring inputs/results: first_seen, price history, comparables, scores."""
+    area = extract_postcode_area(listing["address"])
+    sold = sold_prices.get(area, []) if area else []
+    if not sold:
+        for a in postcode_areas:
+            if sold_prices.get(a):
+                sold = sold_prices[a]
+                break
+
+    entry = state.get("seen", {}).get(listing["id"], {})
+    listing["first_seen"] = entry.get("first_seen") or entry.get("last_seen")
+    history = entry.get("price_history")
+    listing["price_history"] = history if isinstance(history, list) else None
+    listing["relisted"] = listing["id"] in state.get("off_market", {})
+
+    conf_score, conf_breakdown = calculate_confidence(listing, sold, all_listings)
+    listing["comparables"] = find_street_comparables(listing, sold)
+    listing["confidence"] = {"score": conf_score, "breakdown": conf_breakdown}
+    listing["mortgage"] = estimate_mortgage(listing["price"])
+    listing["negotiation"] = calculate_negotiation(listing, sold)
+
+
+def _update_state(state, filtered, source_counts):
+    """Persist seen listings with price history, off-market tracking and run history."""
+    now = datetime.now()
+    now_iso = now.isoformat()
+    seen = state.setdefault("seen", {})
+    off_market = state.setdefault("off_market", {})
+    current_ids = {l["id"] for l in filtered}
+
+    # Persist current listings (preserving first_seen and price history)
+    for listing in filtered:
+        lid = listing["id"]
+        history = []
+        first_seen = now_iso
+        if lid in off_market:
+            prior = off_market.pop(lid)
+            first_seen = prior.get("first_seen") or first_seen
+            history = prior.get("price_history") or []
+        elif lid in seen:
+            first_seen = seen[lid].get("first_seen") or seen[lid].get("last_seen") or first_seen
+            history = seen[lid].get("price_history") or []
+
+        prev_price = seen[lid]["price"] if lid in seen else None
+        if not history or history[-1]["price"] != listing["price"]:
+            history.append({"date": now_iso, "price": listing["price"]})
+        history = history[-PRICE_HISTORY_MAX:]
+
+        seen[lid] = {
+            "price": listing["price"],
+            "address": listing["address"],
+            "sqft": listing.get("sqft"),
+            "source": listing.get("source"),
+            "first_seen": first_seen,
+            "last_seen": now_iso,
+            "price_history": history,
+            "misses": 0,
+        }
+
+    # Promote listings absent for N consecutive runs to off-market
+    for lid in list(seen.keys()):
+        if lid in current_ids:
+            continue
+        entry = seen[lid]
+        entry["misses"] = entry.get("misses", 0) + 1
+        if entry["misses"] >= MISSING_RUNS_BEFORE_OFF_MARKET:
+            off_market[lid] = {
+                "address": entry.get("address", ""),
+                "price": entry.get("price"),
+                "sqft": entry.get("sqft"),
+                "source": entry.get("source"),
+                "first_seen": entry.get("first_seen"),
+                "last_seen": entry.get("last_seen"),
+                "price_history": entry.get("price_history") or [],
+            }
+            del seen[lid]
+
+    # Keep the off-market list bounded
+    if len(off_market) > OFF_MARKET_MAX:
+        items = sorted(
+            off_market.items(), key=lambda kv: kv[1].get("last_seen") or "", reverse=True
+        )[:OFF_MARKET_MAX]
+        state["off_market"] = dict(items)
+
+def _source_medians(history):
+    """Median raw-listing count per source across recent runs."""
+    medians = {}
+    srcs = set()
+    for r in history:
+        srcs.update((r.get("sources") or {}).keys())
+    for src in srcs:
+        vals = [r["sources"][src] for r in history if (r.get("sources") or {}).get(src) is not None]
+        if len(vals) >= 2:
+            medians[src] = statistics.median(vals)
+    return medians
+
+
+def _assess_health(config, state, source_counts, filtered_count):
+    """Track run health; alert via Telegram on repeated degraded runs.
+
+    A run is degraded if: every source returned 0, a source returned 0 when it
+    normally returns >=1, or the filtered count collapses by >=50% vs the
+    rolling median. Returns True when the run is healthy.
+    """
+    now_iso = datetime.now().isoformat()
+    history = state.setdefault("run_history", [])
+    history.append({"ts": now_iso, "sources": dict(source_counts), "filtered": filtered_count})
+    state["run_history"] = history[-14:]
+
+    failures = []
+    total_raw = sum(source_counts.values()) if source_counts else 0
+    if total_raw == 0:
+        failures.append("all configured sources returned 0 listings")
+
+    medians = _source_medians(history)
+    for src, count in source_counts.items():
+        norm = medians.get(src)
+        if count == 0 and norm is not None and norm >= 1:
+            failures.append(f"{src} returned 0 listings (normally ~{norm:g})")
+
+    counts = [r["filtered"] for r in history if isinstance(r.get("filtered"), int)]
+    if len(counts) >= 4:
+        rolling = statistics.median(counts[-8:-1])
+        if rolling > 0 and filtered_count < rolling * 0.5:
+            failures.append(
+                f"filtered count collapsed ({filtered_count} vs rolling median {rolling:.0f})"
+            )
+
+    if failures:
+        state["failed_runs"] = state.get("failed_runs", 0) + 1
+    else:
+        state["failed_runs"] = 0
+        state["last_successful_run"] = now_iso
+
+    if failures:
+        log(f"HEALTH: degraded run - {'; '.join(failures)} (consecutive: {state['failed_runs']})")
+        fr = state["failed_runs"]
+        if fr == WATCHDOG_FAIL_THRESHOLD or (fr > WATCHDOG_FAIL_THRESHOLD and fr % WATCHDOG_FAIL_THRESHOLD == 0):
+            send_watchdog_alert(config, failures, fr)
+        return False
+    return True
+
+
+def _run_cycle():
+    """Run the full scrape -> rate -> alert -> state -> dashboard cycle.
+
+    Returns (status, summary). Status is 'ok' or 'degraded'.
+    """
     global _seen_before
     log("=== Run started ===")
     config = load_config()
     state = load_state()
 
-    # Track what was seen before this run
-    _seen_before = set(state["seen"].keys())
+    _seen_before = set(state.get("seen", {}).keys())
 
-    # Fetch from all configured sources
-    all_listings = []
-    for source in config.get("sources", []):
-        try:
-            if source == "ontemarket":
-                all_listings.extend(fetch_ontemarket(config))
-            elif source == "barkers":
-                all_listings.extend(fetch_barkers(config))
-        except Exception as e:
-            log(f"ERROR fetching {source}: {e}")
+    # --- Fetch & filter ---
+    all_listings, source_counts = _collect_raw_listings(config)
+    log(f"Total raw listings: {len(all_listings)} ({source_counts or 'no sources configured'})")
 
-    log(f"Total raw listings: {len(all_listings)}")
-
-    # Apply filters
     filtered = filter_listings(all_listings, config)
     log(f"After filtering: {len(filtered)} listings")
 
-    # Enrich with sq ft from detail pages
     filtered = enrich_with_sqft(filtered)
 
-    # Find new and price-dropped
+    overrides = config.get("sqft_overrides", {})
+    for l in filtered:
+        if l["id"] in overrides and not l.get("sqft"):
+            l["sqft"] = overrides[l["id"]]
+
+    for l in filtered:
+        if l.get("sqft") and not l.get("sqm"):
+            l["sqm"] = round(l["sqft"] * 0.0929)
+
+    # --- Sold prices & market context ---
+    postcode_areas = set()
+    for l in filtered:
+        area = extract_postcode_area(l["address"])
+        if area:
+            postcode_areas.add(area)
+    if not postcode_areas:
+        postcode_areas = {"WF15"}
+
+    all_sold = {}
+    for area in postcode_areas:
+        all_sold[area] = fetch_sold_prices(area)
+
+    market_temps = {}
+    for area, sold in all_sold.items():
+        if sold:
+            market_temps[area] = calculate_market_temperature(sold)
+            log(f"  {area}: {market_temps[area]['detail']}")
+
+    # --- Scoring ---
+    for listing in filtered:
+        _attach_derived(listing, all_sold, postcode_areas, state, filtered)
+
+    filtered.sort(key=lambda l: l["confidence"]["score"], reverse=True)
+
+    # --- Alerts ---
     new_listings, price_drops = find_alerts(filtered, state)
 
     if new_listings or price_drops:
         log(f"ALERTS: {len(new_listings)} new, {len(price_drops)} price drops")
         for l in new_listings:
-            log(f"  NEW: \xa3{l['price']:,} {l['bedrooms']}-bed {l['type']} - {l['address']} [{l['source']}]")
+            log(f"  NEW: \xa3{l['price']:,} {l['bedrooms']}-bed {l['type']} - {l['address']} [{l['source']}] conf={l['confidence']['score']}")
         for l in price_drops:
             log(
                 f"  DROP: \xa3{l['old_price']:,}->\xa3{l['price']:,} "
                 f"{l['bedrooms']}-bed {l['type']} - {l['address']} [{l['source']}]"
             )
-
         try:
             subject = send_email(config, new_listings, price_drops)
             if subject:
                 log(f"Email sent: {subject}")
         except Exception as e:
             log(f"EMAIL ERROR: {e}")
+        try:
+            send_telegram_alert(config, new_listings, price_drops)
+        except Exception as e:
+            log(f"TELEGRAM ERROR: {e}")
     else:
         log(f"No alerts ({len(filtered)} listings in range)")
 
-    # Update state
-    for listing in filtered:
-        state["seen"][listing["id"]] = {
-            "price": listing["price"],
-            "address": listing["address"],
-            "sqft": listing.get("sqft"),
-            "last_seen": datetime.now().isoformat(),
-        }
+    # --- State persistence ---
+    _update_state(state, filtered, source_counts)
+    healthy = _assess_health(config, state, source_counts, len(filtered))
     state["last_run"] = datetime.now().isoformat()
     save_state(state)
 
-    # Generate HTML dashboard (pass all filtered listings + price drops for display)
-    display_listings = filtered + [
-        {**l, "price": l["old_price"], "_is_drop": True}
-        for l in price_drops
-    ]
-    # For display, use the current price version of drops
-    display_listings = filtered[:]
-    for l in price_drops:
-        display_listings.append(l)
-    generate_html(display_listings)
+    # --- Dashboard ---
+    generate_html(filtered, market_temps, state)
 
-    log("=== Run complete ===\n")
+    status = "ok" if healthy else "degraded"
+    log(f"=== Run complete (status={status}) ===")
+    return status, {
+        "new": len(new_listings),
+        "drops": len(price_drops),
+        "filtered": len(filtered),
+    }
+
+
+def main():
+    status, summary = _run_cycle()
+    if os.environ.get("PROPERTY_WATCH_SKIP_PUSH"):
+        log("Skipping git push (PROPERTY_WATCH_SKIP_PUSH is set)")
+    else:
+        push_to_github()
+class PropertyHandler(BaseHTTPRequestHandler):
+    """HTTP handler serving the generated dashboard (read-only)."""
+
+    def log_message(self, format, *args):
+        log(f"SERVER: {args[0]}")
+
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(HTML_FILE.read_bytes())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+
+def run_server(port=8080):
+    """Run the dashboard as a local read-only web server (binds 127.0.0.1)."""
+    log("Server mode - running initial cycle...")
+    try:
+        _run_cycle()
+    except Exception as e:
+        log(f"Initial cycle failed, serving last generated dashboard: {e}")
+
+    server = HTTPServer(("127.0.0.1", port), PropertyHandler)
+    log(f"Dashboard running at http://127.0.0.1:{port}")
+    log("Press Ctrl+C to stop")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        log("Server stopped")
+        server.server_close()
 
 
 if __name__ == "__main__":
-    main()
+    if "--server" in sys.argv:
+        port = 8080
+        for arg in sys.argv:
+            if arg.startswith("--port="):
+                port = int(arg.split("=")[1])
+        run_server(port)
+    else:
+        main()

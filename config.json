@@ -1,0 +1,61 @@
+{
+  "filters": {
+    "bedrooms": 3,
+    "min_price": 120000,
+    "max_price": 220000,
+    "property_types": [
+      "Terraced",
+      "Semi-detached",
+      "End of terrace"
+    ]
+  },
+  "search": {
+    "centre": "Heckmondwike, WF16",
+    "radius_miles": 2
+  },
+  "sources": [
+    "ontemarket",
+    "barkers"
+  ],
+  "manual_listings": [
+    {
+      "id": "rm-92368626",
+      "source": "Rightmove",
+      "address": "Hare Park Drive, Liversedge, West Yorkshire, WF15",
+      "price": 165000,
+      "bedrooms": 3,
+      "type": "terraced",
+      "url": "https://www.rightmove.co.uk/properties/92368626",
+      "agent": "EweMove",
+      "image": "https://media.rightmove.co.uk/property-photo/7d16eaab6/92368626/7d16eaab6981d1b0bd7fbe4fd4dddf92.jpeg",
+      "sqft": 700
+    },
+    {
+      "id": "rm-91657857",
+      "source": "Rightmove",
+      "address": "Leyland Road, Batley, WF17",
+      "price": 170000,
+      "bedrooms": 3,
+      "type": "end of terrace",
+      "url": "https://www.rightmove.co.uk/properties/91657857",
+      "agent": "Watsons Property Services, Birstall",
+      "image": "https://media.rightmove.co.uk/property-photo/69ca87186/91657857/69ca87186f0cf82272750024b864a608.jpeg",
+      "sqft": 800
+    }
+  ],
+  "email": {
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "sender": "ibutt1315@gmail.com",
+    "password_app": "",
+    "recipient": "ibutt1315@gmail.com"
+  },
+  "telegram": {
+    "bot_token": "",
+    "chat_id": "6459892848"
+  },
+  "sqft_overrides": {
+    "otm-20135343": 800,
+    "otm-19007492": 875
+  }
+}

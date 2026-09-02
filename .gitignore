@@ -9,8 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
-# Sensitive / runtime files
-config.json
-state.json
-state.json.bak
+# Runtime data (config.json/state.json/index.html are committed on purpose:
+# CI needs them, state doubles as the audit trail, index.html feeds Pages)
+config.local.json
+sold_cache.json
+web_additions.json
 alerts.log
+state.json.bak
+.pytest_cache/

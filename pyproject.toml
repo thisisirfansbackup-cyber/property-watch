@@ -1,12 +1,15 @@
 [project]
 name = "property-watch"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Monitors the Heckmondwike housing market: new listings, price drops, buying-confidence scoring."
 requires-python = ">=3.13"
-dependencies = []
+dependencies = ["curl_cffi>=0.7.0"]
 
 [project.scripts]
-property-watch = "property_watch:main"
+property-watch = "watch:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

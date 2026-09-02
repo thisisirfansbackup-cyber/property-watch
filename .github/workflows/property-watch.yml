@@ -1,0 +1,52 @@
+name: Property Watch
+
+on:
+  schedule:
+    # Every 30 minutes during UK daylight hours (07:00-21:59 UTC = 08:00-22:59 BST).
+    # Overnight is quiet; a 30-min cadence keeps source load sane.
+    - cron: "*/30 7-21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: property-watch
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install curl_cffi pytest
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Run property watch
+        env:
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          PROPERTY_WATCH_SKIP_PUSH: "1"
+        run: python watch.py
+
+      - name: Commit and push dashboard + state
+        run: |
+          git config user.name "property-watch-bot"
+          git config user.email "actions@github.com"
+          git add index.html state.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update dashboard $(date -u +'%Y-%m-%d %H:%M')"
+            git push
+          fi
