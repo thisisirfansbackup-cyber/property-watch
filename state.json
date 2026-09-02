@@ -1,19 +1,12 @@
 {
   "seen": {
-    "otm-19914264": {
-      "price": 165000,
-      "address": "Lincoln Avenue, West Yorkshire WF15",
-      "sqft": 850,
-      "last_seen": "2026-08-28T08:45:05.795974",
-      "misses": 1
-    },
     "otm-19245936": {
       "price": 170000,
       "address": "Cornmill Drive, Liversedge, WF15",
       "sqft": 667,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249487",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -28,7 +21,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249490",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -43,7 +36,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -52,27 +45,13 @@
       ],
       "misses": 0
     },
-    "otm-20101927": {
-      "price": 210000,
-      "address": "Walkley Villas, Heckmondwike",
-      "sqft": null,
-      "last_seen": "2026-08-24T16:00:05.847950",
-      "misses": 1
-    },
-    "otm-19588017": {
-      "price": 188000,
-      "address": "Bradford Road, West Yorkshire WF15",
-      "sqft": 764,
-      "last_seen": "2026-08-28T09:45:06.075277",
-      "misses": 1
-    },
     "otm-19007492": {
       "price": 220000,
       "address": "Lascelles Road, Heckmondwike",
       "sqft": 875,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249499",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -87,7 +66,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -102,7 +81,7 @@
       "sqft": 700,
       "source": "Rightmove",
       "first_seen": "2026-09-02T22:15:07.249497",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -111,20 +90,13 @@
       ],
       "misses": 0
     },
-    "manual-f2ffb0acfeaf": {
-      "price": 155000,
-      "address": "456 Test Avenue, WF15",
-      "sqft": null,
-      "last_seen": "2026-08-25T18:53:29.636109",
-      "misses": 1
-    },
     "rm-91657857": {
       "price": 170000,
       "address": "Leyland Road, Batley, WF17",
       "sqft": 800,
       "source": "Rightmove",
       "first_seen": "2026-09-02T22:15:07.249476",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -139,7 +111,7 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -148,20 +120,13 @@
       ],
       "misses": 0
     },
-    "otm-17889162": {
-      "price": 170000,
-      "address": "Firthcliffe Grove, Liversedge, WF15",
-      "sqft": 753,
-      "last_seen": "2026-09-02T10:45:05.831038",
-      "misses": 1
-    },
     "otm-20239851": {
       "price": 180000,
       "address": "Hadfield Road, Heckmondwike",
       "sqft": null,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249492",
-      "last_seen": "2026-09-02T22:30:06.289067",
+      "last_seen": "2026-09-02T22:45:05.595749",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -171,9 +136,55 @@
       "misses": 0
     }
   },
-  "last_run": "2026-09-02T22:30:06.289119",
+  "last_run": "2026-09-02T22:45:05.595811",
   "market_history": {},
-  "off_market": {},
+  "off_market": {
+    "otm-19914264": {
+      "address": "Lincoln Avenue, West Yorkshire WF15",
+      "price": 165000,
+      "sqft": 850,
+      "source": null,
+      "first_seen": null,
+      "last_seen": "2026-08-28T08:45:05.795974",
+      "price_history": []
+    },
+    "otm-20101927": {
+      "address": "Walkley Villas, Heckmondwike",
+      "price": 210000,
+      "sqft": null,
+      "source": null,
+      "first_seen": null,
+      "last_seen": "2026-08-24T16:00:05.847950",
+      "price_history": []
+    },
+    "otm-19588017": {
+      "address": "Bradford Road, West Yorkshire WF15",
+      "price": 188000,
+      "sqft": 764,
+      "source": null,
+      "first_seen": null,
+      "last_seen": "2026-08-28T09:45:06.075277",
+      "price_history": []
+    },
+    "manual-f2ffb0acfeaf": {
+      "address": "456 Test Avenue, WF15",
+      "price": 155000,
+      "sqft": null,
+      "source": null,
+      "first_seen": null,
+      "last_seen": "2026-08-25T18:53:29.636109",
+      "price_history": []
+    },
+    "otm-17889162": {
+      "address": "Firthcliffe Grove, Liversedge, WF15",
+      "price": 170000,
+      "sqft": 753,
+      "source": null,
+      "first_seen": null,
+      "last_seen": "2026-09-02T10:45:05.831038",
+      "price_history": []
+    }
+  },
   "run_history": [
     {
       "ts": "2026-09-02T22:30:06.289103",
@@ -182,8 +193,16 @@
         "barkers": 120
       },
       "filtered": 9
+    },
+    {
+      "ts": "2026-09-02T22:45:05.595790",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 9
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-09-02T22:30:06.289103"
+  "last_successful_run": "2026-09-02T22:45:05.595790"
 }
