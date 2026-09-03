@@ -13,7 +13,7 @@
           "price": 170000
         }
       ],
-      "misses": 0
+      "misses": 1
     },
     "otm-19947904": {
       "price": 170000,
@@ -21,7 +21,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249490",
-      "last_seen": "2026-09-03T00:20:25.231479",
+      "last_seen": "2026-09-03T11:54:06.102623",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -36,7 +36,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-03T00:20:25.231479",
+      "last_seen": "2026-09-03T11:54:06.102623",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -58,7 +58,7 @@
           "price": 220000
         }
       ],
-      "misses": 0
+      "misses": 1
     },
     "otm-18683740": {
       "price": 174950,
@@ -66,7 +66,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-03T00:20:25.231479",
+      "last_seen": "2026-09-03T11:54:06.102623",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -81,7 +81,7 @@
       "sqft": 700,
       "source": "Rightmove",
       "first_seen": "2026-09-02T22:15:07.249497",
-      "last_seen": "2026-09-03T00:20:25.231479",
+      "last_seen": "2026-09-03T11:54:06.102623",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -96,7 +96,7 @@
       "sqft": 800,
       "source": "Rightmove",
       "first_seen": "2026-09-02T22:15:07.249476",
-      "last_seen": "2026-09-03T00:20:25.231479",
+      "last_seen": "2026-09-03T11:54:06.102623",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -111,7 +111,7 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-03T00:20:25.231479",
+      "last_seen": "2026-09-03T11:54:06.102623",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -126,7 +126,7 @@
       "sqft": null,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249492",
-      "last_seen": "2026-09-03T00:20:25.231479",
+      "last_seen": "2026-09-03T11:54:06.102623",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -134,9 +134,24 @@
         }
       ],
       "misses": 0
+    },
+    "otm-20257799": {
+      "price": 185000,
+      "address": "Cornmill Drive, Liversedge WF15",
+      "sqft": 656,
+      "source": "OnTheMarket",
+      "first_seen": "2026-09-03T11:54:06.102623",
+      "last_seen": "2026-09-03T11:54:06.102623",
+      "price_history": [
+        {
+          "date": "2026-09-03T11:54:06.102623",
+          "price": 185000
+        }
+      ],
+      "misses": 0
     }
   },
-  "last_run": "2026-09-03T00:20:25.231597",
+  "last_run": "2026-09-03T11:54:06.102733",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -281,8 +296,16 @@
         "barkers": 120
       },
       "filtered": 9
+    },
+    {
+      "ts": "2026-09-03T11:54:06.102690",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 8
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-09-03T00:20:25.231524"
+  "last_successful_run": "2026-09-03T11:54:06.102690"
 }
