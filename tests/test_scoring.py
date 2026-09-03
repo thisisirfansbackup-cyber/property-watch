@@ -25,7 +25,7 @@ def make_listing(**overrides):
     return listing
 
 
-def make_sale(price, date, type="terraced", street="FIRTHCLIFFE ROAD", town="LIVERSEDGE"):
+def make_sale(price, date, type="terraced", street="FIRTHCLIFFE ROAD", town="LIVERSEDGE", postcode="WF15 8AN", paon=""):
     return {
         "price": price,
         "date": date,
@@ -33,6 +33,8 @@ def make_sale(price, date, type="terraced", street="FIRTHCLIFFE ROAD", town="LIV
         "tenure": "freehold",
         "street": street,
         "town": town,
+        "postcode": postcode,
+        "paon": paon,
     }
 
 
@@ -104,9 +106,36 @@ def test_negotiation_insufficient_data():
 
 def test_negotiation_overpriced_label():
     listing = make_listing(price=250000)
-    sales = [make_sale(150000, "2026-01-01"), make_sale(160000, "2026-07-01")]
-    neg = watch.calculate_negotiation(listing, sales)
+    sales = [
+        make_sale(150000, "2026-01-01"),
+        make_sale(160000, "2026-07-01"),
+        make_sale(155000, "2026-06-01"),
+    ]
+    neg = watch.calculate_negotiation(listing, sales, watch.find_comparables(listing, sales))
     assert neg["label"] in ("overpriced", "negotiate")
+
+
+def test_negotiation_needs_three_sales():
+    """Two sales are a coincidence, not a market — negotiation must refuse."""
+    listing = make_listing(price=250000)
+    sales = [make_sale(150000, "2026-01-01"), make_sale(160000, "2026-07-01")]
+    neg = watch.calculate_negotiation(listing, sales, watch.find_comparables(listing, sales))
+    assert neg["range_text"] == "Insufficient data"
+    assert neg["count"] == 0
+
+
+def test_negotiation_carries_tier_basis():
+    listing = make_listing(price=140000)
+    sales = [
+        make_sale(150000, "2026-06-01"),
+        make_sale(155000, "2026-05-01"),
+        make_sale(160000, "2026-04-01"),
+    ]
+    comps = watch.find_comparables(listing, sales)
+    neg = watch.calculate_negotiation(listing, sales, comps)
+    assert neg["basis"] == comps["label"]
+    assert neg["count"] == 3
+    assert neg["median"] == comps["median"]
 
 
 def test_confidence_cheaper_scores_higher():
@@ -137,18 +166,100 @@ def test_confidence_repeat_drops_boost_score():
     assert conf_multi > conf_single
 
 
-def test_street_comparables_matches_only_same_type_on_street():
+def test_find_comparables_prefers_same_type_street_tier():
     listing = {"address": "Firthcliffe Road, Liversedge, WF15", "type": "terraced"}
     sold = [
-        {"price": 150000, "date": "2026-06-01", "type": "terraced", "street": "FIRTHCLIFFE ROAD"},
-        {"price": 200000, "date": "2026-05-01", "type": "semi-detached", "street": "FIRTHCLIFFE ROAD"},
-        {"price": 160000, "date": "2024-01-01", "type": "terraced", "street": "OTHER ROAD"},
+        make_sale(150000, "2026-06-01", "terraced"),
+        make_sale(155000, "2026-05-01", "terraced"),
+        make_sale(160000, "2026-04-01", "terraced"),
+        make_sale(200000, "2026-05-01", "semi-detached"),
     ]
-    comps = watch.find_street_comparables(listing, sold)
-    assert len(comps) == 1
-    assert comps[0]["price"] == 150000
+    result = watch.find_comparables(listing, sold)
+    assert result["tier"] == 1
+    assert result["label"] == "same type, your street"
+    assert all(s["type"] == "terraced" for s in result["comps"])
+    assert len(result["comps"]) == 3
 
 
-def test_street_comparables_empty_when_short_street():
-    listing = {"address": "WF15 something", "type": "terraced"}
-    assert watch.find_street_comparables(listing, []) == []
+def test_find_comparables_sector_fallback_when_street_thin():
+    listing = {"address": "Firthcliffe Road, Liversedge, WF15 8AN", "type": "terraced"}
+    sold = [
+        make_sale(150000, "2026-06-01", "terraced", street="FIRTHCLIFFE ROAD"),
+        make_sale(140000, "2026-03-01", "terraced", street="MILL LANE", postcode="WF15 8BP"),
+        make_sale(145000, "2026-02-01", "terraced", street="HIGH STREET", postcode="WF15 8CC"),
+    ]
+    result = watch.find_comparables(listing, sold)
+    assert result["tier"] == 2
+    assert result["label"] == "same type, sector WF15 8"
+    assert result["count"] == 3
+
+
+def test_find_comparables_epc_bedroom_tier_wins():
+    listing = {
+        "address": "Firthcliffe Road, Liversedge, WF15",
+        "type": "terraced",
+        "bedrooms": 3,
+    }
+    sold = [
+        make_sale(150000, "2026-06-01", "terraced", paon="12"),
+        make_sale(155000, "2026-05-01", "terraced", paon="14"),
+        make_sale(160000, "2026-04-01", "terraced", paon="16"),
+    ]
+    epc = {
+        ("WF158AN", "firthcliffe road", "12"): 3,
+        ("WF158AN", "firthcliffe road", "14"): 3,
+        ("WF158AN", "firthcliffe road", "16"): 3,
+    }
+    result = watch.find_comparables(listing, sold, epc)
+    assert result["tier"] == 0
+    assert result["label"] == "3-bed, same type, your street"
+
+
+def test_find_comparables_none_when_no_evidence():
+    listing = {"address": "Nowhere Street, WF15", "type": "terraced"}
+    sold = [make_sale(100000, "2026-01-01", "flat", street="OTHER STREET")]
+    assert watch.find_comparables(listing, sold) is None
+
+
+def test_type_key_maps_listing_type_variants():
+    assert watch._type_key({"type": "End Terrace"}) == "terraced"
+    assert watch._type_key({"type": "Mid-Terraced House"}) == "terraced"
+    assert watch._type_key({"type": "Semi-Detached"}) == "semi-detached"
+    assert watch._type_key({"type": "Detached"}) == "detached"
+    assert watch._type_key({"type": "Bungalow"}) == ""
+
+
+def test_confidence_excludes_missing_signals_and_labels_it():
+    """Missing signals must be dropped and rescaled, never counted as neutral 50."""
+    listing = make_listing(price=160000)
+    score, breakdown = watch.calculate_confidence(listing, [], [listing])
+    # listing age is the only factor with evidence here: no sold benchmark
+    # (so no price or £/sqft fairness), no context, no history
+    assert breakdown["_based_on"] == 1
+    assert breakdown["area_median"]["score"] is None
+    assert breakdown["sqft_value"]["score"] is None
+    assert breakdown["market_context"]["score"] is None
+    assert breakdown["price_drop"]["score"] is None
+    assert breakdown["listing_age"]["score"] is not None
+    assert 0 <= score <= 100
+
+
+def test_confidence_zero_evidence_is_zero():
+    listing = make_listing(price=160000, sqft=None, first_seen=None)
+    score, breakdown = watch.calculate_confidence(listing, [], [listing])
+    assert breakdown["_based_on"] == 0
+    assert score == 0
+
+
+def test_confidence_full_evidence_beats_partial():
+    """With identical asking-vs-market prices, more evidence means more confidence."""
+    sales = [
+        make_sale(155000, "2026-06-01"),
+        make_sale(150000, "2026-05-01"),
+        make_sale(160000, "2026-04-01"),
+    ]
+    thin = make_listing(price=155000, sqft=None)
+    full = make_listing(price=155000, sqft=800)
+    thin_score, _ = watch.calculate_confidence(thin, sales, [thin])
+    full_score, _ = watch.calculate_confidence(full, sales, [full])
+    assert full_score > thin_score

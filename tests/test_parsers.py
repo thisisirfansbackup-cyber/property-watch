@@ -51,13 +51,33 @@ def test_filter_listings_applies_bedroom_price_type_band():
         }
     }
     listings = [
-        {"id": "a", "bedrooms": 3, "price": 150000, "type": "terraced"},
-        {"id": "b", "bedrooms": 2, "price": 150000, "type": "terraced"},
-        {"id": "c", "bedrooms": 3, "price": 500000, "type": "terraced"},
-        {"id": "d", "bedrooms": 3, "price": 150000, "type": "detached"},
+        {"id": "a", "address": "1 High Street, Liversedge, WF15", "bedrooms": 3, "price": 150000, "type": "terraced"},
+        {"id": "b", "address": "2 High Street, Liversedge, WF15", "bedrooms": 2, "price": 150000, "type": "terraced"},
+        {"id": "c", "address": "3 High Street, Liversedge, WF15", "bedrooms": 3, "price": 500000, "type": "terraced"},
+        {"id": "d", "address": "4 High Street, Liversedge, WF15", "bedrooms": 3, "price": 150000, "type": "detached"},
     ]
     filtered = watch.filter_listings(listings, config)
     assert [l["id"] for l in filtered] == ["a"]
+
+
+def test_filter_listings_enforces_5mile_ring():
+    """Listings outside the 12-district WF16 ring are excluded."""
+    config = {
+        "filters": {
+            "bedrooms": 3,
+            "min_price": 120000,
+            "max_price": 220000,
+            "property_types": ["Terraced", "Semi-detached"],
+        }
+    }
+    listings = [
+        {"id": "in-bd19", "address": "9 Bradford Road, Cleckheaton, BD19", "bedrooms": 3, "price": 160000, "type": "semi-detached"},
+        {"id": "in-wf17", "address": "5 Green Lane, Birstall, WF17", "bedrooms": 3, "price": 170000, "type": "terraced"},
+        {"id": "out-bd20", "address": "1 Elm Grove, Keighley, BD20", "bedrooms": 3, "price": 150000, "type": "terraced"},
+        {"id": "out-hd5", "address": "2 West Parade, Huddersfield, HD5", "bedrooms": 3, "price": 150000, "type": "semi-detached"},
+    ]
+    filtered = watch.filter_listings(listings, config)
+    assert [l["id"] for l in filtered] == ["in-bd19", "in-wf17"]
 
 
 def test_extract_postcode_area_from_address():

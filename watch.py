@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Property watch - monitors Heckmondwike area property listings.
 
-Checks OnTheMarket and Barkers for 3-bed terraced/semi-detached houses near
-Heckmondwike within the configured price band. Alerts on new listings and price
+Checks OnTheMarket and Barkers for 3-bed terraced/semi-detached houses within
+a 5-mile ring of WF16 (12 postcode districts, enforced at filter time) and the
+configured price band. Alerts on new listings and price
 drops via email and Telegram. Tracks per-property price history, off-market /
-re-listed status, street-level sold comparables, and generates an HTML dashboard
-with buying-confidence scores, mortgage estimates and market temperature.
+re-listed status, and generates an HTML dashboard with a tiered
+buying-confidence score, mortgage estimates and market temperature.
 
 Secrets (Gmail app password, Telegram bot token) are resolved from environment
 variables first (GMAIL_APP_PASSWORD, TELEGRAM_BOT_TOKEN), then from config.json,
@@ -13,6 +14,7 @@ then from the git-ignored config.local.json overlay. Set PROPERTY_WATCH_SKIP_PUS
 to skip the automatic git push (CI commits and pushes itself).
 """
 
+import base64
 import csv
 import io
 import json
@@ -44,6 +46,26 @@ OFF_MARKET_MAX = 30                # most recent "off market" entries kept in st
 MISSING_RUNS_BEFORE_OFF_MARKET = 2 # consecutive misses before a listing is marked off-market
 PRICE_HISTORY_MAX = 12             # per-listing price points retained
 WATCHDOG_FAIL_THRESHOLD = 3        # consecutive degraded runs before a watchdog alert fires
+
+# Sold-price comparables tunables
+COMP_MIN_COUNT = 3                 # minimum sales before a comparison tier counts as evidence
+COMP_LOOKBACK_DAYS = 730           # sold prices older than this are ignored
+COMP_LIMIT = 5                     # comparables shown per property
+EPC_CACHE_DAYS = 30                # EPC bedroom data refetched monthly (when a key is configured)
+EPC_CACHE_FILE = SCRIPT_DIR / "epc_cache.json"
+
+# Search area: everything within ~5 miles of WF16. Verified against
+# postcodes.io centroid distances (WF16 centroid 53.7102,-1.6696):
+#   WF15 1.3mi, WF16 0, WF17 1.3, WF13 1.5, WF14 2.4, WF12 2.8, BD19 2.2,
+#   BD11 2.9, LS27 3.8, WF5 4.3, HD6 4.7, BD4 5.0
+# Excluded (beyond 5mi): HD5 5.4mi, WF10 13.2mi, BD20 17.3mi.
+# OnTheMarket/Barkers have no reliable server-side radius parameter, so the
+# ring is enforced here at filter time.
+SEARCH_RADIUS_MILES = 5.0
+AREA_ALLOWLIST = {
+    "WF16", "WF15", "WF17", "WF13", "WF14", "WF12",
+    "BD19", "BD11", "LS27", "WF5", "HD6", "BD4",
+}
 
 SESSION = cffi_requests.Session(impersonate="chrome")
 
@@ -156,14 +178,17 @@ def fetch_sold_prices(postcode_area):
             return cached["data"]
 
     url = "https://landregistry.data.gov.uk/app/ppd/ppd_data.csv"
-    today = datetime.now()
-    start_date = (today - timedelta(days=730)).strftime("%Y-%m-%d")
-    end_date = today.strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=COMP_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    end_date = datetime.now().strftime("%Y-%m-%d")
     params = {
         "register": "England",
         "start_date": start_date,
         "end_date": end_date,
         "postcode": postcode_area.upper(),
+        # The endpoint otherwise returns ~100 arbitrary rows and ignores the
+        # date range; requesting a huge limit gets the full district history
+        # which we filter by date below.
+        "limit": "10000",
     }
 
     log(f"Fetching Land Registry sold prices for {postcode_area}...")
@@ -174,14 +199,17 @@ def fetch_sold_prices(postcode_area):
         log(f"Land Registry fetch failed: {e}")
         return []
 
-    reader = csv.reader(io.StringIO(r.text))
-    header = next(reader, None)
+    rows = list(csv.reader(io.StringIO(r.text)))
+    # Some PPD exports have a header row, some do not; detect by checking
+    # whether the price column of the first row is numeric.
+    if rows and (len(rows[0]) < 2 or not rows[0][1].strip().isdigit()):
+        rows = rows[1:]
 
     type_map = {"T": "terraced", "S": "semi-detached", "D": "detached", "F": "flat", "O": "other"}
     tenure_map = {"F": "freehold", "L": "leasehold"}
 
     results = []
-    for row in reader:
+    for row in rows:
         if len(row) < 12:
             continue
         try:
@@ -191,6 +219,7 @@ def fetch_sold_prices(postcode_area):
         date = row[2] if len(row) > 2 else ""
         prop_type = type_map.get(row[4], row[4])
         tenure = tenure_map.get(row[6], row[6])
+        paon = (row[8] if len(row) > 8 else "").strip()
         street = row[9] if len(row) > 9 else ""
         town = row[11] if len(row) > 11 else ""
 
@@ -199,12 +228,20 @@ def fetch_sold_prices(postcode_area):
             "date": date,
             "type": prop_type,
             "tenure": tenure,
+            "paon": paon,
             "street": street,
             "town": town,
+            "postcode": (row[3] if len(row) > 3 else "").strip(),
         })
 
     results = [r for r in results if r["date"] >= start_date]
     log(f"Land Registry: {len(results)} recent sold prices ({start_date[:4]}+) for {postcode_area}")
+
+    if not results:
+        # Never overwrite a usable cache with an empty fetch (e.g. endpoint
+        # silently returning no rows).
+        log(f"Land Registry: no rows for {postcode_area} — keeping previous cache")
+        return cache.get(cache_key, {}).get("data", [])
 
     cache[cache_key] = {
         "fetched": datetime.now().isoformat(),
@@ -216,13 +253,17 @@ def fetch_sold_prices(postcode_area):
 
 
 def extract_postcode_area(address):
-    """Extract postcode area (e.g. 'WF15') from a full address string."""
-    match = re.search(r'(WF\d{1,2})\s*\w{0,3}', address, re.IGNORECASE)
+    """Extract postcode district (e.g. 'WF15', 'BD19') from an address string."""
+    addr = (address or "").strip()
+    # Full postcode first (e.g. 'WF16 0AB') -> district part
+    match = re.search(r"\b([A-Z]{1,2}\d{1,2}[A-Z]?)\s*\d[A-Z]{2}\b", addr, re.IGNORECASE)
     if match:
         return match.group(1).upper()
-    match = re.search(r'([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2})', address, re.IGNORECASE)
+    # Bare district token at a word boundary (e.g. 'Cleckheaton, BD19').
+    # Two leading letters required so road names like 'A6'/'M62' don't match.
+    match = re.search(r"\b([A-Z]{2}\d{1,2}[A-Z]?)\b(?!\s*\d)", addr, re.IGNORECASE)
     if match:
-        return match.group(1).split()[0].upper()
+        return match.group(1).upper()
     return ""
 
 
@@ -288,19 +329,36 @@ def _weighted_mean(sold_prices, prop_type=None):
 # Market temperature
 # ---------------------------------------------------------------------------
 
-def calculate_market_temperature(sold_prices):
+def calculate_market_temperature(sold_prices, prop_type=None):
     """Determine if the local market is rising, stable, or cooling.
 
     Compares weighted average of recent sales (last 6 months) vs older sales
-    (6-12 months). Returns dict with trend, change_pct, and detail.
+    (6-12 months). When ``prop_type`` is given, only sales of that type are
+    used (terraced and semi-detached move differently). When either cohort is
+    empty the returned dict says so explicitly in ``detail`` instead of
+    pretending a stable market.
     """
-    recent = [s for s in sold_prices if _time_weight(s["date"]) == 1.0]
-    older = [s for s in sold_prices if _time_weight(s["date"]) == 0.5]
+    pool = sold_prices
+    label = "all house types"
+    if prop_type:
+        pool = [s for s in sold_prices if s.get("type") == prop_type]
+        label = prop_type
 
-    if not recent:
-        return {"trend": "stable", "change_pct": 0, "detail": "Insufficient data for trend"}
-    if not older:
-        return {"trend": "stable", "change_pct": 0, "detail": f"Only {len(recent)} recent sales — no trend yet"}
+    recent = [s for s in pool if _time_weight(s["date"]) == 1.0]
+    older = [s for s in pool if _time_weight(s["date"]) == 0.5]
+
+    if not recent or not older:
+        counts = ", ".join(
+            f"{t}: {sum(1 for s in pool if s.get('type') == t)}"
+            for t in sorted({s.get("type", "?") for s in pool})
+        ) or "no sales"
+        return {
+            "trend": "stable",
+            "change_pct": 0,
+            "detail": f"Not enough sales for a {label} trend (last 2 years: {counts})",
+            "sales_count": len(pool),
+            "prop_type": prop_type,
+        }
 
     recent_avg = statistics.mean(s["price"] for s in recent)
     older_avg = statistics.mean(s["price"] for s in older)
@@ -317,11 +375,16 @@ def calculate_market_temperature(sold_prices):
     return {
         "trend": trend,
         "change_pct": round(change_pct, 1),
-        "detail": f"Prices {trend} ({change_pct:+.1f}% over 6 months)",
+        "detail": (
+            f"{label.title()} prices {trend} "
+            f"({change_pct:+.1f}% over 6 months, {len(recent)}+{len(older)} sales)"
+        ),
         "recent_avg": round(recent_avg),
         "older_avg": round(older_avg),
         "recent_count": len(recent),
         "older_count": len(older),
+        "sales_count": len(pool),
+        "prop_type": prop_type,
     }
 
 
@@ -329,17 +392,29 @@ def calculate_market_temperature(sold_prices):
 # Negotiation guide
 # ---------------------------------------------------------------------------
 
-def calculate_negotiation(listing, sold_prices):
+def calculate_negotiation(listing, sold_prices, comps=None):
     """Calculate a fair offer range for a listing.
 
-    Based on the time-weighted median sold price for matching property type.
+    Uses the best available comparable tier (same find_comparables ladder as
+    the confidence score) so the advice rests on same-type, same-street sales
+    when they exist — and says which basis it used.
     """
-    type_key = "terraced" if "terraced" in listing["type"].lower() else "semi-detached"
-    median = _weighted_median(sold_prices, type_key)
-    if not median:
-        median = _weighted_median(sold_prices)
-    if not median:
-        return {"range_text": "Insufficient data", "low": 0, "high": 0, "vs_median": 0}
+    if comps is None:
+        comps = find_comparables(listing, sold_prices)
+    if not comps or not comps.get("median"):
+        return {
+            "range_text": "Insufficient data",
+            "low": 0,
+            "high": 0,
+            "vs_median": 0,
+            "median": 0,
+            "label": "insufficient",
+            "basis": "",
+            "count": 0,
+        }
+
+    median = comps["median"]
+    basis = comps["label"]
 
     asking = listing["price"]
     vs_median_pct = ((asking - median) / median) * 100 if median > 0 else 0
@@ -374,6 +449,8 @@ def calculate_negotiation(listing, sold_prices):
         "vs_median": round(vs_median_pct, 1),
         "median": median,
         "label": label,
+        "basis": basis,
+        "count": comps.get("count", 0),
     }
 
 
@@ -398,50 +475,45 @@ def _smooth_score(ratio, breakpoints):
     return breakpoints[-1][1]
 
 
-def calculate_confidence(listing, sold_prices, all_listings):
-    """Calculate a buying confidence score (0-100) with dynamic factors.
+def calculate_confidence(listing, sold_prices, all_listings, comps=None):
+    """Calculate a buying confidence score (0-100) from real evidence only.
 
     Factors:
-      1. Asking price vs time-weighted area median (30%)
-      2. Price per sqft vs area average (25%, skipped if no sqft)
+      1. Asking price vs sold-price comparables, best evidence tier (30%)
+      2. Price per sqft vs comparable average (25%, needs sold data)
       3. Price drop history (15%)
       4. Smart listing age — age × price drop combo (10%)
       5. Market context — vs current listings (20%)
 
     Uses smooth linear interpolation (no hard cliff edges between scores).
-    When sq ft is unknown, its 25% weight is redistributed to other factors.
+    A factor without evidence is EXCLUDED and the remaining weights are
+    rescaled to 100% — the score never pretends missing data is 'neutral'.
+    ``comps`` is the best comparable tier from find_comparables(); when
+    omitted it is derived here.
     """
+    if comps is None:
+        comps = find_comparables(listing, sold_prices)
+
     sqft = listing.get("sqft")
     has_sqft = sqft and sqft > 0
 
     # Base weights
-    w1 = 0.30   # area median (time-weighted)
+    w1 = 0.30   # sold comps
     w2 = 0.25   # sqft value
     w3 = 0.15   # price drop
     w4 = 0.10   # listing age (smart)
     w5 = 0.20   # market context
 
     if not has_sqft:
-        redistribute = w2
-        base = w1 + w3 + w4 + w5
-        w1 += redistribute * (w1 / base)
-        w3 += redistribute * (w3 / base)
-        w4 += redistribute * (w4 / base)
-        w5 += redistribute * (w5 / base)
         w2 = 0.0
 
-    score = 0.0
+    active = {}   # factor name -> weight; only factors with real evidence
     breakdown = {}
 
-    # --- Factor 1: Asking price vs time-weighted area median ---
-    type_key = "terraced" if "terraced" in listing["type"].lower() else "semi-detached"
-    median_price = _weighted_median(sold_prices, type_key)
-    avg_price = _weighted_mean(sold_prices, type_key)
-    if not median_price:
-        median_price = _weighted_median(sold_prices)
-        avg_price = _weighted_mean(sold_prices)
-
-    if median_price:
+    # --- Factor 1: Asking price vs sold-price comparables (best tier) ---
+    if comps and comps.get("median"):
+        median_price = comps["median"]
+        avg_price = _weighted_mean(comps["comps"]) if comps.get("comps") else median_price
         ratio = listing["price"] / median_price if median_price > 0 else 1
         factor1 = _smooth_score(ratio, [
             (0.80, 100), (0.90, 85), (1.00, 65),
@@ -450,17 +522,23 @@ def calculate_confidence(listing, sold_prices, all_listings):
 
         breakdown["area_median"] = {
             "score": factor1,
-            "detail": f"Asking is {ratio:.0%} of area median (&pound;{median_price:,.0f})",
+            "detail": (
+                f"Asking is {ratio:.0%} of {comps['count']} sold comps "
+                f"({comps['label']}, median &pound;{median_price:,.0f})"
+            ),
             "median": median_price,
             "avg": avg_price,
+            "tier_label": comps["label"],
         }
-        score += factor1 * w1
+        active["area_median"] = w1
     else:
-        breakdown["area_median"] = {"score": 50, "detail": "No sold data available"}
-        score += 50 * w1
+        breakdown["area_median"] = {
+            "score": None,
+            "detail": "No comparable sold prices &mdash; price fairness not scored",
+        }
 
-    # --- Factor 2: Price per sqft vs area average ---
-    if has_sqft:
+    # --- Factor 2: Price per sqft vs comparable average ---
+    if has_sqft and "area_median" in active:
         listing_sqft_price = listing["price"] / sqft
         area_sqft_price = avg_price / 750 if avg_price else listing_sqft_price
         sqft_ratio = listing_sqft_price / area_sqft_price if area_sqft_price > 0 else 1
@@ -471,13 +549,18 @@ def calculate_confidence(listing, sold_prices, all_listings):
 
         breakdown["sqft_value"] = {
             "score": factor2,
-            "detail": f"&pound;{listing_sqft_price:,.0f}/sqft vs area &pound;{area_sqft_price:,.0f}/sqft",
+            "detail": f"&pound;{listing_sqft_price:,.0f}/sqft vs &pound;{area_sqft_price:,.0f}/sqft local average",
         }
-        score += factor2 * w2
+        active["sqft_value"] = w2
+    elif has_sqft:
+        breakdown["sqft_value"] = {
+            "score": None,
+            "detail": "No local sold benchmark &mdash; &pound;/sqft shown for reference only",
+        }
     else:
         breakdown["sqft_value"] = {
             "score": None,
-            "detail": "Sq ft unknown &mdash; scored on price comparison only",
+            "detail": "Sq ft unknown &mdash; size value not scored",
         }
 
     # --- Factor 3: Price drop history (repeat drops signal a motivated seller) ---
@@ -514,10 +597,12 @@ def calculate_confidence(listing, sold_prices, all_listings):
         if drop_count >= 2:
             detail += f" &middot; {drop_count} drops in tracked history"
         breakdown["price_drop"] = {"score": factor3, "detail": detail}
-        score += factor3 * w3
+        active["price_drop"] = w3
+    elif history:
+        breakdown["price_drop"] = {"score": 50, "detail": "No price drops in tracked history"}
+        active["price_drop"] = w3
     else:
-        breakdown["price_drop"] = {"score": 50, "detail": "No price drop recorded"}
-        score += 50 * w3
+        breakdown["price_drop"] = {"score": None, "detail": "No tracked price history yet"}
 
     # --- Factor 4: Smart listing age (age × price drop combo) ---
     first_seen = listing.get("first_seen")
@@ -544,10 +629,9 @@ def calculate_confidence(listing, sold_prices, all_listings):
             "detail": f"On market {days_listed} days{drop_note}",
             "days": days_listed,
         }
-        score += factor4 * w4
+        active["listing_age"] = w4
     else:
-        breakdown["listing_age"] = {"score": 50, "detail": "Listing age unknown"}
-        score += 50 * w4
+        breakdown["listing_age"] = {"score": None, "detail": "Listing age unknown"}
 
     # --- Factor 5: Market context (vs current listings) ---
     if all_listings and len(all_listings) >= 2:
@@ -566,10 +650,25 @@ def calculate_confidence(listing, sold_prices, all_listings):
             "score": factor5,
             "detail": f"{ctx_ratio:.0%} of current avg (&pound;{market_avg:,.0f})",
         }
-        score += factor5 * w5
+        active["market_context"] = w5
     else:
-        breakdown["market_context"] = {"score": 50, "detail": "Single listing — no comparison"}
-        score += 50 * w5
+        breakdown["market_context"] = {
+            "score": None,
+            "detail": "Not enough other listings to compare against",
+        }
+
+    # --- Rescale over the factors that actually had evidence ---
+    # Factor scores are on a 0-100 scale and weights sum to 1 across active
+    # factors, so the weighted mean stays on the 0-100 scale.
+    total_weight = sum(active.values())
+    if total_weight > 0:
+        score = (
+            sum(breakdown[name]["score"] * weight for name, weight in active.items())
+            / total_weight
+        )
+    else:
+        score = 0.0
+    breakdown["_based_on"] = len(active)
 
     return round(score), breakdown
 
@@ -606,28 +705,270 @@ def estimate_mortgage(price):
     }
 
 
-def find_street_comparables(listing, sold_prices, limit=5):
-    """Find recent same-type sold prices on or near the listing's street.
+def find_comparables(listing, sold_prices, epc_map=None):
+    """Find honest sold-price comparables using a tiered evidence ladder.
 
-    Street names are matched case-insensitively in either direction (listing
-    address first token vs Land Registry street field), so 'Firthcliffe Road'
-    matches 'FIRTHCLIFFE ROAD'. Returns the most recent up to ``limit``.
+    Tiers (the first with >= COMP_MIN_COUNT sales wins):
+      0. 3-bed + same type + same street   (only when EPC bedroom data available)
+      1. same type + same street
+      2. same type + same postcode sector
+      3. same type + whole postcode district
+      4. any house type + whole district   (last resort, labelled as such)
+
+    Returns {"tier", "label", "median", "count", "comps"} or None when even
+    the last-resort tier lacks COMP_MIN_COUNT sales — callers must treat the
+    price factor as missing rather than inventing a neutral value. ``comps``
+    holds the most recent COMP_LIMIT sales in the winning tier.
     """
-    street = listing["address"].split(",")[0].strip().lower()
-    if not street or len(street) < 3:
-        return []
-    ptype = "terraced" if "terraced" in listing["type"].lower() else "semi-detached"
+    street = _street_of(listing.get("address"))
+    district = extract_postcode_area(listing.get("address") or "")
+    ptype = _type_key(listing)
 
-    matches = []
-    for s in sold_prices:
-        s_street = (s.get("street") or "").strip().lower()
-        if not s_street:
+    def _take(pool):
+        pool = sorted(pool, key=lambda s: s["date"], reverse=True)
+        return pool, _weighted_median(pool)
+
+    tiers = []
+
+    # --- Street-level pools -------------------------------------------------
+    same_street = [
+        s for s in sold_prices
+        if _streets_match(street, (s.get("street") or "").strip().lower())
+    ]
+    same_street_type = (
+        [s for s in same_street if s.get("type") == ptype] if ptype else same_street
+    )
+
+    # Tier 0: EPC-verified bedroom match on the street
+    if epc_map and listing.get("bedrooms"):
+        beds_pool = [
+            {**s, "beds": listing["bedrooms"]}
+            for s in same_street_type
+            if _epc_lookup_bedrooms(s, epc_map) == listing["bedrooms"]
+        ]
+        if len(beds_pool) >= COMP_MIN_COUNT:
+            pool, median = _take(beds_pool)
+            tiers.append({
+                "tier": 0,
+                "label": f"{listing['bedrooms']}-bed, same type, your street",
+                "count": len(pool),
+                "comps": pool[:COMP_LIMIT],
+                "median": median,
+            })
+
+    if len(same_street_type) >= COMP_MIN_COUNT:
+        pool, median = _take(same_street_type)
+        tiers.append({
+            "tier": 1,
+            "label": "same type, your street" if ptype else "your street",
+            "count": len(pool),
+            "comps": pool[:COMP_LIMIT],
+            "median": median,
+        })
+
+    # --- Sector-level pool --------------------------------------------------
+    listing_sector = _listing_sector(listing.get("address"))
+    if listing_sector:
+        sector_pool = [
+            s for s in sold_prices
+            if (not ptype or s.get("type") == ptype)
+            and _postcode_sector(s.get("postcode")) == listing_sector
+        ]
+        if len(sector_pool) >= COMP_MIN_COUNT:
+            pool, median = _take(sector_pool)
+            tiers.append({
+                "tier": 2,
+                "label": (
+                    f"same type, sector {listing_sector}"
+                    if ptype else f"sector {listing_sector}"
+                ),
+                "count": len(pool),
+                "comps": pool[:COMP_LIMIT],
+                "median": median,
+            })
+
+    # --- District-level pools ----------------------------------------------
+    district_type = (
+        [s for s in sold_prices if s.get("type") == ptype] if ptype else list(sold_prices)
+    )
+    if len(district_type) >= COMP_MIN_COUNT:
+        pool, median = _take(district_type)
+        area_label = f"{district} district" if district else "local area"
+        tiers.append({
+            "tier": 3,
+            "label": f"same type, {area_label}" if ptype else area_label,
+            "count": len(pool),
+            "comps": pool[:COMP_LIMIT],
+            "median": median,
+        })
+    elif len(sold_prices) >= COMP_MIN_COUNT:
+        pool, median = _take(list(sold_prices))
+        area_label = (
+            f"all house types, {district} district" if district else "all house types, local area"
+        )
+        tiers.append({
+            "tier": 4,
+            "label": area_label,
+            "count": len(pool),
+            "comps": pool[:COMP_LIMIT],
+            "median": median,
+        })
+
+    return tiers[0] if tiers else None
+
+
+def _type_key(listing):
+    """Map a free-text listing type onto a Land Registry type category.
+
+    'End of Terrace' and 'Mid Terrace' both count as terraced; unrecognised
+    types return '' so comparables match any type (and say so on the label).
+    """
+    t = (listing.get("type") or "").lower()
+    if "terraced" in t or "terrace" in t:
+        return "terraced"
+    if "semi" in t:
+        return "semi-detached"
+    if "detached" in t:
+        return "detached"
+    if "flat" in t or "apartment" in t:
+        return "flat"
+    return ""
+
+
+def _street_of(address):
+    """Extract the street name from a listing address.
+
+    Handles 'Cornmill Drive, Liversedge, WF15' as well as numbered forms like
+    '12 Powell Street, Heckmondwike WF16 0AB' (leading numbers are stripped).
+    """
+    first = (address or "").split(",")[0].strip().lower()
+    first = re.sub(r"^(flat\s+\S+|apartment\s+\S+)\s*,\s*", "", first)
+    first = re.sub(r"^\d+\w{0,2}\s+", "", first)
+    first = re.sub(r"\s+", " ", first).strip()
+    return first
+
+
+def _streets_match(a, b):
+    """Case-insensitive street comparison with a guarded containment fallback."""
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    shorter, longer = sorted((a, b), key=len)
+    return len(shorter) >= 6 and shorter in longer
+
+
+def _postcode_sector(postcode):
+    """'WF16 0AB' -> 'WF16 0'; '' when unparseable."""
+    pc = (postcode or "").upper().strip()
+    m = re.match(r"([A-Z]{1,2}\d{1,2}[A-Z]?)\s*(\d)", pc)
+    return f"{m.group(1)} {m.group(2)}" if m else ""
+
+
+def _listing_sector(address):
+    """Postcode sector of a listing address ('' when it has no full postcode)."""
+    m = re.search(r"\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b", (address or "").upper())
+    return _postcode_sector(m.group(0)) if m else ""
+
+
+def _epc_lookup_bedrooms(sale, epc_map):
+    """Bedroom count for a sold record via the EPC map, or None."""
+    if not epc_map:
+        return None
+    key = (
+        (sale.get("postcode") or "").upper().replace(" ", ""),
+        (sale.get("street") or "").strip().lower(),
+        (sale.get("paon") or "").strip().lower(),
+    )
+    return epc_map.get(key)
+
+
+def _load_epc_cache():
+    if EPC_CACHE_FILE.exists():
+        try:
+            with open(EPC_CACHE_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_epc_cache(cache):
+    with open(EPC_CACHE_FILE, "w") as f:
+        json.dump(cache, f)
+
+
+def _epc_settings(config):
+    """Return (email, api_key) for the EPC open-data API, or None."""
+    api_key = get_secret(config, "EPC_API_KEY", "epc.api_key")
+    email = get_secret(config, "EPC_EMAIL", "epc.email")
+    if api_key and email:
+        return email, api_key
+    return None
+
+
+def fetch_epc_bedrooms(district, config):
+    """Build {(postcode, street, paon) -> bedrooms} for a postcode district.
+
+    Uses the free MHCLG EPC open-data API, which needs a free account
+    (EPC_EMAIL / EPC_API_KEY env vars, or 'epc.email' / 'epc.api_key' in the
+    local config overlay). The sold-price register itself carries no bedroom
+    field — this join is the only honest way to filter sold comps by beds.
+    Returns None when no key is configured or the service fails; callers then
+    fall back to the keyless comparison tiers.
+    """
+    if not district:
+        return None
+    key = district.upper()
+    cache = _load_epc_cache()
+    if key in cache:
+        try:
+            fetched = datetime.fromisoformat(cache[key]["fetched"])
+            if (datetime.now() - fetched).days < EPC_CACHE_DAYS:
+                return cache[key].get("map")
+        except (ValueError, KeyError, TypeError):
+            pass
+    auth = _epc_settings(config)
+    if not auth:
+        return None
+    log(f"Fetching EPC bedroom data for {district}...")
+    try:
+        token = base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
+        r = SESSION.get(
+            "https://epc.opendatacommunities.org/api/v1/domestic/search",
+            params={"outcode": key},
+            headers={"Accept": "text/csv", "Authorization": f"Basic {token}"},
+            timeout=45,
+        )
+        r.raise_for_status()
+        rows = list(csv.DictReader(io.StringIO(r.text)))
+    except Exception as e:
+        log(f"EPC fetch failed for {district}: {e}")
+        return None
+
+    def _col(row, *needles):
+        for col in row:
+            up = col.upper()
+            if any(n in up for n in needles):
+                return row[col]
+        return ""
+
+    result = {}
+    for row in rows:
+        bedrooms = _col(row, "BEDROOM")
+        if not bedrooms or not str(bedrooms).strip().isdigit():
             continue
-        if street in s_street or s_street in street:
-            if s["type"] == ptype:
-                matches.append(s)
-    matches.sort(key=lambda s: s["date"], reverse=True)
-    return matches[:limit]
+        pc = _col(row, "POSTCODE").upper().replace(" ", "")
+        street = _col(row, "ADDRESS2", "ADDRESS3", "STREET").strip().lower()
+        paon = _col(row, "ADDRESS1").strip().lower()
+        if pc and street:
+            result[(pc, street, paon)] = int(bedrooms)
+    if not result:
+        log(f"EPC: no bedroom data parsed for {district} — falling back to keyless tiers")
+        return None
+    cache[key] = {"fetched": datetime.now().isoformat(), "map": result}
+    _save_epc_cache(cache)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -811,7 +1152,7 @@ def _parse_barkers_page(html):
 
 
 def filter_listings(listings, config):
-    """Apply client-side filters for property type, beds, price."""
+    """Apply client-side filters: 5-mile ring, property type, beds, price."""
     filters = config["filters"]
     target_types = [t.lower() for t in filters["property_types"]]
     allowed_beds = filters["bedrooms"]
@@ -819,6 +1160,7 @@ def filter_listings(listings, config):
     max_price = filters["max_price"]
 
     filtered = []
+    outside = []
     for listing in listings:
         if listing["bedrooms"] != allowed_beds:
             continue
@@ -827,8 +1169,18 @@ def filter_listings(listings, config):
         ptype = listing["type"].lower()
         if not any(t in ptype for t in target_types):
             continue
+        area = extract_postcode_area(listing["address"])
+        if area and area not in AREA_ALLOWLIST:
+            outside.append(listing)
+            continue
         filtered.append(listing)
 
+    if outside:
+        log(
+            f"Excluded {len(outside)} listing(s) outside the "
+            f"{SEARCH_RADIUS_MILES:g}-mile WF16 ring "
+            f"(allowed: {', '.join(sorted(AREA_ALLOWLIST))})"
+        )
     return filtered
 
 
@@ -884,7 +1236,7 @@ def send_email(config, new_listings, price_drops):
     lines = []
     total = len(new_listings) + len(price_drops)
     lines.append(f"PROPERTY ALERT - {total} item(s)")
-    lines.append(f"Heckmondwike + 2mi | 3-bed terraced/semi-detached")
+    lines.append(f"WF16 + 5 mile ring | 3-bed terraced/semi-detached")
     lines.append("")
 
     if new_listings:
@@ -945,7 +1297,7 @@ def send_telegram_alert(config, new_listings, price_drops):
     lines = []
     total = len(new_listings) + len(price_drops)
     lines.append(f"🏠 PROPERTY ALERT — {total} item(s)")
-    lines.append("Heckmondwike + 2mi | 3-bed terraced/semi-detached")
+    lines.append("WF16 + 5 mile ring | 3-bed terraced/semi-detached")
     lines.append("")
 
     if new_listings:
@@ -1180,14 +1532,26 @@ def generate_html(listings, market_temps, state=None):
     for rank, l in enumerate(sorted_listings, 1):
         l["rank"] = rank
 
-    # Market temperature HTML
+    # Market temperature HTML (per property type where data allows)
     temp_html = ""
     if market_temps:
         temp_items = []
-        for area, temp in market_temps.items():
+        for key, temp in market_temps.items():
             trend_icon = {"rising": "&#9650;", "cooling": "&#9660;", "stable": "&#9679;"}.get(temp["trend"], "&#9679;")
             trend_class = temp["trend"]
-            temp_items.append(f'<span class="temp-item {trend_class}">{area}: {trend_icon} {temp["trend"].title()} ({temp["change_pct"]:+.1f}%)</span>')
+            if "|" in key:
+                area_name, ttype = key.split("|", 1)
+                label = f"{area_name} {ttype.replace('-', ' ')}"
+            else:
+                label = f"{key} (all house types)"
+            if temp.get("recent_count") and temp.get("older_count"):
+                value = f'{trend_icon} {temp["trend"].title()} ({temp["change_pct"]:+.1f}%)'
+            else:
+                value = f"{trend_icon} not enough sales for a trend"
+            detail = temp.get("detail", "")
+            temp_items.append(
+                f'<span class="temp-item {trend_class}" title="{detail}">{label}: {value}</span>'
+            )
         temp_html = f'<div class="market-temp">{"".join(temp_items)}</div>'
 
     cards_html = ""
@@ -1256,30 +1620,43 @@ def generate_html(listings, market_temps, state=None):
                 <div class="negotiation">
                     <div class="neg-title">Negotiation Guide</div>
                     <div class="neg-text {neg_class}">{negotiation['range_text']}</div>
-                    <div class="neg-detail">Area median: &pound;{negotiation.get('median', 0):,} &middot; Asking is {negotiation.get('vs_median', 0):+.1f}% vs median</div>
+                    <div class="neg-detail">Comp median: &pound;{negotiation.get('median', 0):,} &middot; asking is {negotiation.get('vs_median', 0):+.1f}% vs comps &middot; basis: {negotiation.get('basis', 'n/a')} ({negotiation.get('count', 0)} sale{'s' if negotiation.get('count', 0) != 1 else ''})</div>
                 </div>"""
 
-        # Street-level sold comparables (informational)
+        # Sold comparables used by the score (informational)
         comps = l.get("comparables") or []
         if comps:
             comp_prices = " &middot; ".join(f"&pound;{c['price']:,}" for c in comps[:5])
-            conf.setdefault("breakdown", {})["street_comparables"] = {
+            tier_label = (
+                (conf.get("breakdown", {}).get("area_median") or {}).get("tier_label")
+                or "comparables"
+            )
+            conf.setdefault("breakdown", {})["sold_comparables"] = {
                 "score": None,
-                "detail": f"{len(comps)} comparable sale{'' if len(comps) == 1 else 's'} on/near this street: {comp_prices}",
+                "detail": f"{len(comps)} sale{'' if len(comps) == 1 else 's'} used ({tier_label}): {comp_prices}",
             }
 
         # Confidence breakdown
         breakdown_html = ""
         if conf.get("breakdown"):
             items = []
+            based_on = conf["breakdown"].get("_based_on")
+            if based_on is not None:
+                items.append(
+                    '<div class="factor"><span class="factor-label">Evidence</span>'
+                    f'<span class="factor-detail">Based on {based_on} of 5 signals &mdash; '
+                    'missing signals are excluded, not counted as neutral</span></div>'
+                )
             for key, val in conf["breakdown"].items():
+                if key.startswith("_"):
+                    continue
                 label = {
-                    "area_median": "vs Area Sold Prices",
+                    "area_median": "vs Sold Comparables",
                     "sqft_value": "Price per sqft",
                     "price_drop": "Price Drop",
                     "listing_age": "Listing Age",
                     "market_context": "Market Context",
-                    "street_comparables": "Street Comparables",
+                    "sold_comparables": "Sold Comparables Used",
                 }.get(key, key)
                 s = val["score"]
                 if s is None:
@@ -1442,7 +1819,7 @@ body {{ font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; b
 <body>
 <div class="header">
     <h1>Property Watch</h1>
-    <div class="sub">3-bed terraced/semi-detached &middot; &pound;120k&ndash;&pound;220k &middot; 2mi radius</div>
+    <div class="sub">3-bed terraced/semi-detached &middot; &pound;120k&ndash;&pound;220k &middot; within 5 miles of WF16</div>
     <div class="count">{count} matching {properties(count)} &middot; Avg score: {avg_score:.0f}/100</div>
 </div>
 {temp_html}
@@ -1456,8 +1833,8 @@ body {{ font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; b
 </div>
 {off_html}
 <div class="footer">
-    Updated {now} &middot; Auto-refreshes every 30 minutes &middot; Dynamic scoring with market context &middot; {run_summary_html}<br/>
-    Sold prices from HM Land Registry &middot; Mortgage: &pound;{DEPOSIT:,} deposit at {MORTGAGE_RATE:.1%} over {MORTGAGE_YEARS} years
+    Updated {now} &middot; Auto-refreshes every 30 minutes &middot; Evidence-based scoring: only real data counts &middot; {run_summary_html}<br/>
+    Sold prices from HM Land Registry (comparables ladder: same type + street &rarr; postcode sector &rarr; district) &middot; Mortgage: &pound;{DEPOSIT:,} deposit at {MORTGAGE_RATE:.1%} over {MORTGAGE_YEARS} years
 </div>
 </body>
 </html>"""
@@ -1553,7 +1930,7 @@ def _collect_raw_listings(config):
     return all_listings, source_counts
 
 
-def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings):
+def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings, epc_map=None):
     """Attach scoring inputs/results: first_seen, price history, comparables, scores."""
     area = extract_postcode_area(listing["address"])
     sold = sold_prices.get(area, []) if area else []
@@ -1569,11 +1946,13 @@ def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings):
     listing["price_history"] = history if isinstance(history, list) else None
     listing["relisted"] = listing["id"] in state.get("off_market", {})
 
-    conf_score, conf_breakdown = calculate_confidence(listing, sold, all_listings)
-    listing["comparables"] = find_street_comparables(listing, sold)
+    comps = find_comparables(listing, sold, epc_map)
+
+    conf_score, conf_breakdown = calculate_confidence(listing, sold, all_listings, comps)
+    listing["comparables"] = comps["comps"] if comps else []
     listing["confidence"] = {"score": conf_score, "breakdown": conf_breakdown}
     listing["mortgage"] = estimate_mortgage(listing["price"])
-    listing["negotiation"] = calculate_negotiation(listing, sold)
+    listing["negotiation"] = calculate_negotiation(listing, sold, comps)
 
 
 def _update_state(state, filtered, source_counts):
@@ -1734,21 +2113,37 @@ def _run_cycle():
         if area:
             postcode_areas.add(area)
     if not postcode_areas:
-        postcode_areas = {"WF15"}
+        postcode_areas = {"WF16"}
 
     all_sold = {}
     for area in postcode_areas:
         all_sold[area] = fetch_sold_prices(area)
 
+    # Optional EPC bedroom data (only when a free EPC API key is configured);
+    # enables true "3-bed, same type, same street" comparables.
+    epc_maps = {}
+    for area in postcode_areas:
+        m = fetch_epc_bedrooms(area, config)
+        if m:
+            epc_maps[area] = m
+
+    # Market temperature per property type (terraced/semi move differently)
     market_temps = {}
     for area, sold in all_sold.items():
-        if sold:
-            market_temps[area] = calculate_market_temperature(sold)
-            log(f"  {area}: {market_temps[area]['detail']}")
+        if not sold:
+            continue
+        listed_types = sorted({_type_key(l) for l in filtered if _type_key(l)})
+        for t in listed_types:
+            temp = calculate_market_temperature(sold, t)
+            market_temps[f"{area}|{t}"] = temp
+            log(f"  {area} {t}: {temp['detail']}")
 
     # --- Scoring ---
     for listing in filtered:
-        _attach_derived(listing, all_sold, postcode_areas, state, filtered)
+        area = extract_postcode_area(listing["address"]) or next(iter(postcode_areas))
+        _attach_derived(
+            listing, all_sold, postcode_areas, state, filtered, epc_maps.get(area)
+        )
 
     filtered.sort(key=lambda l: l["confidence"]["score"], reverse=True)
 

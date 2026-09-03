@@ -13,6 +13,7 @@ wheels/
 # CI needs them, state doubles as the audit trail, index.html feeds Pages)
 config.local.json
 sold_cache.json
+epc_cache.json
 web_additions.json
 alerts.log
 state.json.bak

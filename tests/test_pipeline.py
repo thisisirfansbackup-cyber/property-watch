@@ -138,8 +138,9 @@ def test_generate_html_smoke(sandbox, monkeypatch):
         "breakdown": {"area_median": {"score": 80, "detail": "x"}},
     }
     listing["mortgage"] = watch.estimate_mortgage(listing["price"])
-    listing["negotiation"] = watch.calculate_negotiation(listing, SOLD)
-    listing["comparables"] = watch.find_street_comparables(listing, SOLD)
+    comps = watch.find_comparables(listing, SOLD)
+    listing["comparables"] = comps["comps"] if comps else []
+    listing["negotiation"] = watch.calculate_negotiation(listing, SOLD, comps)
     listing["price_history"] = [
         {"date": "2026-08-01T00:00:00", "price": 170000},
         {"date": "2026-09-01T00:00:00", "price": 160000},
@@ -159,7 +160,7 @@ def test_generate_html_smoke(sandbox, monkeypatch):
     html = (sandbox / "html_file.tmp").read_text()
     assert "Firthcliffe Road" in html
     assert "class=\"spark\"" in html
-    assert "Street Comparables" in html
+    assert "Sold Comparables Used" in html
     assert "Auto-refreshes every 30 minutes" in html
     assert "Recently off market" not in html
 
