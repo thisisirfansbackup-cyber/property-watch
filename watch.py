@@ -1152,8 +1152,9 @@ def _parse_barkers_page(html):
 
 
 def filter_listings(listings, config):
-    """Apply client-side filters: 5-mile ring, property type, beds, price."""
+    """Apply client-side filters: excluded ids, 5-mile ring, property type, beds, price."""
     filters = config["filters"]
+    excluded = set(config.get("excluded_ids", []))
     target_types = [t.lower() for t in filters["property_types"]]
     allowed_beds = filters["bedrooms"]
     min_price = filters["min_price"]
@@ -1161,7 +1162,11 @@ def filter_listings(listings, config):
 
     filtered = []
     outside = []
+    excluded_count = 0
     for listing in listings:
+        if listing["id"] in excluded:
+            excluded_count += 1
+            continue
         if listing["bedrooms"] != allowed_beds:
             continue
         if listing["price"] < min_price or listing["price"] > max_price:
@@ -1175,6 +1180,8 @@ def filter_listings(listings, config):
             continue
         filtered.append(listing)
 
+    if excluded_count:
+        log(f"Excluded {excluded_count} listing(s) matching excluded_ids")
     if outside:
         log(
             f"Excluded {len(outside)} listing(s) outside the "

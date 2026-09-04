@@ -6,7 +6,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249490",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -21,7 +21,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -36,7 +36,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -51,7 +51,7 @@
       "sqft": 700,
       "source": "Rightmove",
       "first_seen": "2026-09-02T22:15:07.249497",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -63,10 +63,10 @@
     "rm-91657857": {
       "price": 170000,
       "address": "Leyland Road, Batley, WF17",
-      "sqft": 800,
+      "sqft": 872,
       "source": "Rightmove",
       "first_seen": "2026-09-02T22:15:07.249476",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -81,26 +81,11 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
           "price": 165000
-        }
-      ],
-      "misses": 0
-    },
-    "otm-20239851": {
-      "price": 180000,
-      "address": "Hadfield Road, Heckmondwike",
-      "sqft": null,
-      "source": "OnTheMarket",
-      "first_seen": "2026-09-02T22:15:07.249492",
-      "last_seen": "2026-09-04T20:21:46.070986",
-      "price_history": [
-        {
-          "date": "2026-09-02T22:30:06.289067",
-          "price": 180000
         }
       ],
       "misses": 0
@@ -111,7 +96,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-03T11:45:07.412655",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-03T11:45:07.412655",
@@ -126,7 +111,7 @@
       "sqft": 667,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249487",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -138,10 +123,10 @@
     "rm-92584293": {
       "price": 180000,
       "address": "Hadfield Road, Heckmondwike, WF16",
-      "sqft": null,
+      "sqft": 750,
       "source": "Rightmove",
       "first_seen": "2026-09-04T20:21:46.070986",
-      "last_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T20:43:27.055209",
       "price_history": [
         {
           "date": "2026-09-04T20:21:46.070986",
@@ -151,7 +136,7 @@
       "misses": 0
     }
   },
-  "last_run": "2026-09-04T20:21:46.071088",
+  "last_run": "2026-09-04T20:43:27.055290",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -215,22 +200,6 @@
     }
   },
   "run_history": [
-    {
-      "ts": "2026-09-04T17:15:06.196945",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 9
-    },
-    {
-      "ts": "2026-09-04T17:30:07.422356",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 9
-    },
     {
       "ts": "2026-09-04T17:45:05.916975",
       "sources": {
@@ -326,8 +295,24 @@
         "barkers": 120
       },
       "filtered": 10
+    },
+    {
+      "ts": "2026-09-04T20:30:05.314006",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 10
+    },
+    {
+      "ts": "2026-09-04T20:43:27.055256",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 9
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-09-04T20:21:46.071043"
+  "last_successful_run": "2026-09-04T20:43:27.055256"
 }

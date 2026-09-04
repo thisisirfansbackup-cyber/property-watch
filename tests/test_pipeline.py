@@ -196,3 +196,14 @@ def test_health_tracking_in_state(sandbox):
     state = json.loads((sandbox / "state_file.tmp").read_text())
     assert state["last_successful_run"]
     assert len(state["run_history"]) == 1
+
+
+def test_filter_listings_excludes_ids():
+    config = {**CONFIG, "excluded_ids": ["otm-111111"]}
+    kept = watch.filter_listings([dict(LISTINGS[0]), dict(LISTINGS[1])], config)
+    assert [l["id"] for l in kept] == ["barkers-222222"]
+
+
+def test_filter_listings_without_excluded_ids_keeps_all():
+    kept = watch.filter_listings([dict(LISTINGS[0]), dict(LISTINGS[1])], CONFIG)
+    assert [l["id"] for l in kept] == ["otm-111111", "barkers-222222"]
