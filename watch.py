@@ -1427,12 +1427,18 @@ def _match_sold_marker(text):
     """Detect a sold/STC/under-offer marker in listing HTML text.
 
     Returns one of "stc", "under_offer", "sold", or None. Comparative
-    phrases ("sold prices", "sold price history", "recently sold") must not
-    trigger a sale — the page is still for sale.
+    phrases ("sold prices", "sold price history", "recently sold") and the
+    "recently sold & under offer" navigation widget (which appears on every
+    Rightmove listing page) must not trigger a sale — the page is still for
+    sale.
     """
     if not text:
         return None
     lower = text.lower()
+    # Strip the "recently sold & under offer" navigation widget that appears
+    # on every listing page — it is not a status marker for this property.
+    lower = lower.replace("recently sold & under offer", "")
+    lower = lower.replace("recently sold and under offer", "")
     if "sold stc" in lower:
         return "stc"
     if "under offer" in lower:

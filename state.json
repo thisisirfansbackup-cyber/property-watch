@@ -6,7 +6,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249490",
-      "last_seen": "2026-09-04T23:08:38.602448",
+      "last_seen": "2026-09-04T23:00:06.086869",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -25,7 +25,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true
+      "verdict_revised": false
     },
     "otm-19722856": {
       "price": 165000,
@@ -33,7 +33,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-04T23:08:38.602448",
+      "last_seen": "2026-09-04T23:00:06.086869",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -52,7 +52,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true
+      "verdict_revised": false
     },
     "otm-18683740": {
       "price": 174950,
@@ -60,7 +60,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-04T23:08:38.602448",
+      "last_seen": "2026-09-04T23:00:06.086869",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -78,11 +78,8 @@
         "cache_fetched": null
       },
       "verdict_category": "bad",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-04T23:08:38.602049"
-      },
-      "verdict_revised": true
+      "pending_verdict": null,
+      "verdict_revised": false
     },
     "otm-20135343": {
       "price": 165000,
@@ -90,7 +87,7 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-04T23:08:38.602448",
+      "last_seen": "2026-09-04T23:00:06.086869",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -109,7 +106,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true
+      "verdict_revised": false
     },
     "otm-20257799": {
       "price": 185000,
@@ -117,7 +114,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-03T11:45:07.412655",
-      "last_seen": "2026-09-04T23:08:38.602448",
+      "last_seen": "2026-09-04T23:00:06.086869",
       "price_history": [
         {
           "date": "2026-09-03T11:45:07.412655",
@@ -136,7 +133,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true
+      "verdict_revised": false
     },
     "otm-19245936": {
       "price": 170000,
@@ -144,7 +141,7 @@
       "sqft": 667,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249487",
-      "last_seen": "2026-09-04T23:08:38.602448",
+      "last_seen": "2026-09-04T23:00:06.086869",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -162,14 +159,51 @@
         "cache_fetched": null
       },
       "verdict_category": "fair",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-04T23:08:38.602374"
-      },
-      "verdict_revised": true
+      "pending_verdict": null,
+      "verdict_revised": false
+    },
+    "rm-92368626": {
+      "address": "Hare Park Drive, Liversedge, West Yorkshire, WF15",
+      "price": 165000,
+      "sqft": 700,
+      "source": "Rightmove",
+      "first_seen": "2026-09-02T22:15:07.249497",
+      "last_seen": "2026-09-04T23:08:58.278844",
+      "price_history": [
+        {
+          "date": "2026-09-02T22:15:07.249497",
+          "price": 165000
+        }
+      ],
+      "misses": 0,
+      "removed_misses": 0,
+      "evidence_basis": null,
+      "verdict_category": null,
+      "pending_verdict": null,
+      "verdict_revised": null
+    },
+    "rm-92584293": {
+      "address": "Hadfield Road, Heckmondwike, WF16",
+      "price": 180000,
+      "sqft": 750,
+      "source": "Rightmove",
+      "first_seen": "2026-09-04T20:21:46.070986",
+      "last_seen": "2026-09-04T23:08:58.278867",
+      "price_history": [
+        {
+          "date": "2026-09-04T20:21:46.070986",
+          "price": 180000
+        }
+      ],
+      "misses": 0,
+      "removed_misses": 0,
+      "evidence_basis": null,
+      "verdict_category": null,
+      "pending_verdict": null,
+      "verdict_revised": null
     }
   },
-  "last_run": "2026-09-04T23:08:38.602517",
+  "last_run": "2026-09-04T23:00:06.086937",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -338,7 +372,7 @@
       "filtered": 6
     },
     {
-      "ts": "2026-09-04T23:08:38.602483",
+      "ts": "2026-09-04T23:00:06.086905",
       "sources": {
         "ontemarket": 29,
         "barkers": 120
@@ -347,7 +381,7 @@
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-09-04T23:08:38.602483",
+  "last_successful_run": "2026-09-04T23:00:06.086905",
   "sold": {
     "rm-91657857": {
       "address": "Leyland Road, Batley, WF17",
@@ -359,28 +393,6 @@
       "status": "sold",
       "days_on_market": 7,
       "evidence_basis": null
-    },
-    "rm-92368626": {
-      "address": "Hare Park Drive, Liversedge, West Yorkshire, WF15",
-      "price": 165000,
-      "sqft": 700,
-      "source": "Rightmove",
-      "first_seen": "2026-09-02T22:15:07.249497",
-      "sold_date": "2026-09-04T22:45:06.466064",
-      "status": "under_offer",
-      "days_on_market": 2,
-      "evidence_basis": null
-    },
-    "rm-92584293": {
-      "address": "Hadfield Road, Heckmondwike, WF16",
-      "price": 180000,
-      "sqft": 750,
-      "source": "Rightmove",
-      "first_seen": "2026-09-04T20:21:46.070986",
-      "sold_date": "2026-09-04T22:45:06.466064",
-      "status": "under_offer",
-      "days_on_market": 0,
-      "evidence_basis": null
     }
   },
   "outcomes": {
@@ -391,24 +403,6 @@
         "days": 7,
         "note": "User offered full asking price; lost to a higher bid. Market cleared above asking.",
         "source": "user"
-      }
-    ],
-    "rm-92368626": [
-      {
-        "date": "2026-09-04T22:45:06.466064",
-        "status": "under_offer",
-        "days": 2,
-        "note": null,
-        "source": "auto"
-      }
-    ],
-    "rm-92584293": [
-      {
-        "date": "2026-09-04T22:45:06.466064",
-        "status": "under_offer",
-        "days": 0,
-        "note": null,
-        "source": "auto"
       }
     ]
   }

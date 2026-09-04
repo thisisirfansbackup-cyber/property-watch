@@ -449,6 +449,27 @@ def test_match_sold_marker_variants():
     assert watch._match_sold_marker("For sale, offers over") is None
 
 
+def test_match_sold_marker_nav_widget_not_a_sale():
+    """The 'recently sold & under offer' nav widget appears on every Rightmove
+    listing page — it must never be treated as a status marker for THIS
+    property (the defect that wrongly archived Hare Park Drive and Hadfield Road).
+    """
+    page = (
+        '<html><body>'
+        '<a title="recently sold & under offer - see similar nearby properties">'
+        'See nearby</a>'
+        '<h1>12 Some Road</h1>'
+        '</body></html>'
+    )
+    assert watch._match_sold_marker(page) is None
+    # The "and" variant (Rightmove sometimes uses & or and)
+    page2 = page.replace("&amp;", "and")
+    assert watch._match_sold_marker(page2) is None
+    # A real under-offer banner elsewhere on the page must still be detected
+    page3 = page + "<span>Under Offer</span>"
+    assert watch._match_sold_marker(page3) == "under_offer"
+
+
 def test_detect_listing_status_200_with_marker(monkeypatch):
     class FakeResp:
         status_code = 200
