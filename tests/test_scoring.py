@@ -252,14 +252,22 @@ def test_confidence_zero_evidence_is_zero():
 
 
 def test_confidence_full_evidence_beats_partial():
-    """With identical asking-vs-market prices, more evidence means more confidence."""
+    """With identical asking-vs-market prices, more evidence means more confidence.
+
+    The sqft factor needs real EPC floor areas for the comparables (issue 05);
+    without them the factor is excluded rather than estimated from a
+    hardcoded average size.
+    """
     sales = [
         make_sale(155000, "2026-06-01"),
         make_sale(150000, "2026-05-01"),
         make_sale(160000, "2026-04-01"),
     ]
+    epc = {
+        ("WF158AN", "firthcliffe road", ""): {"beds": 3, "area_sqm": 75.0},
+    }
     thin = make_listing(price=155000, sqft=None)
     full = make_listing(price=155000, sqft=800)
-    thin_score, _ = watch.calculate_confidence(thin, sales, [thin])
-    full_score, _ = watch.calculate_confidence(full, sales, [full])
+    thin_score, _ = watch.calculate_confidence(thin, sales, [thin], epc_map=epc)
+    full_score, _ = watch.calculate_confidence(full, sales, [full], epc_map=epc)
     assert full_score > thin_score

@@ -56,32 +56,6 @@ SOLD = [
 ]
 
 
-@pytest.fixture
-def sandbox(tmp_path, monkeypatch):
-    """Redirect runtime files to temp and stub all network/side-effect functions."""
-    for name in (
-        "CONFIG_FILE",
-        "STATE_FILE",
-        "STATE_BAK",
-        "LOG_FILE",
-        "HTML_FILE",
-        "SOLD_CACHE_FILE",
-        "LOCAL_CONFIG_FILE",
-    ):
-        monkeypatch.setattr(watch, name, tmp_path / f"{name.lower()}.tmp")
-    (tmp_path / "config_file.tmp").write_text(json.dumps(CONFIG))
-    (tmp_path / "state_file.tmp").write_text(json.dumps({}))
-
-    monkeypatch.setattr(watch, "fetch_ontemarket", lambda cfg: [dict(LISTINGS[0])])
-    monkeypatch.setattr(watch, "fetch_barkers", lambda cfg: [dict(LISTINGS[1])])
-    monkeypatch.setattr(watch, "fetch_sold_prices", lambda area: [dict(s) for s in SOLD])
-    monkeypatch.setattr(watch, "enrich_with_sqft", lambda listings: [dict(l) for l in listings])
-    monkeypatch.setattr(watch, "send_email", lambda *a, **k: "subject")
-    monkeypatch.setattr(watch, "send_telegram_alert", lambda *a, **k: True)
-    monkeypatch.setattr(watch, "push_to_github", lambda: None)
-    return tmp_path
-
-
 def test_run_cycle_updates_state_and_generates_html(sandbox):
     status, summary = watch._run_cycle()
     assert status == "ok"

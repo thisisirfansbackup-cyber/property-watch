@@ -34,18 +34,6 @@
       "sqft": 700
     },
     {
-      "id": "rm-91657857",
-      "source": "Rightmove",
-      "address": "Leyland Road, Batley, WF17",
-      "price": 170000,
-      "bedrooms": 3,
-      "type": "end of terrace",
-      "url": "https://www.rightmove.co.uk/properties/91657857",
-      "agent": "Watsons Property Services, Birstall",
-      "image": "https://media.rightmove.co.uk/property-photo/69ca87186/91657857/69ca87186f0cf82272750024b864a608.jpeg",
-      "sqft": 872
-    },
-    {
       "id": "rm-92584293",
       "source": "Rightmove",
       "address": "Hadfield Road, Heckmondwike, WF16",

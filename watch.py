@@ -54,6 +54,15 @@ COMP_LIMIT = 5                     # comparables shown per property
 EPC_CACHE_DAYS = 30                # EPC bedroom data refetched monthly (when a key is configured)
 EPC_CACHE_FILE = SCRIPT_DIR / "epc_cache.json"
 
+# Evidence-grade tunables (rating-trust redesign, .scratch/rating-trust)
+GRADE_WEIGHTS = {"HIGH": 1.0, "MEDIUM": 0.75, "LOW": 0.5}
+# Maximum % under asking the negotiation guide may suggest, by grade.
+NEGOTIATION_CAPS = {"LOW": 0.05, "MEDIUM": 0.10, "HIGH": 0.15}
+# Clearing-estimate range width (half-width fraction of the midpoint) by grade.
+ESTIMATE_RANGE = {"HIGH": 0.04, "MEDIUM": 0.08, "LOW": 0.15, "UNSCORED": 0.0}
+# Listing source whose detail pages we poll every run for sold/STC markers.
+SOLD_CHECK_SOURCES = ("Rightmove",)
+
 # Search area: everything within ~5 miles of WF16. Verified against
 # postcodes.io centroid distances (WF16 centroid 53.7102,-1.6696):
 #   WF15 1.3mi, WF16 0, WF17 1.3, WF13 1.5, WF14 2.4, WF12 2.8, BD19 2.2,
@@ -392,13 +401,22 @@ def calculate_market_temperature(sold_prices, prop_type=None):
 # Negotiation guide
 # ---------------------------------------------------------------------------
 
-def calculate_negotiation(listing, sold_prices, comps=None):
+def calculate_negotiation(listing, sold_prices, comps=None, caps=None):
     """Calculate a fair offer range for a listing.
 
     Uses the best available comparable tier (same find_comparables ladder as
     the confidence score) so the advice rests on same-type, same-street sales
     when they exist — and says which basis it used.
+
+    ``caps`` bound how far below asking the guide may go (config
+    ``negotiation_caps``). At LOW/UNSCORED evidence the guide never says
+    "overpriced" and never suggests more than 5% under asking (rating-trust
+    issue 02); at MEDIUM it never suggests more than 10% under asking.
     """
+    if caps is None:
+        caps = NEGOTIATION_CAPS
+    else:
+        caps = {str(k).upper(): v for k, v in caps.items()}
     if comps is None:
         comps = find_comparables(listing, sold_prices)
     if not comps or not comps.get("median"):
@@ -411,10 +429,12 @@ def calculate_negotiation(listing, sold_prices, comps=None):
             "label": "insufficient",
             "basis": "",
             "count": 0,
+            "grade": "UNSCORED",
         }
 
     median = comps["median"]
     basis = comps["label"]
+    grade = comps.get("grade") or "UNSCORED"
 
     asking = listing["price"]
     vs_median_pct = ((asking - median) / median) * 100 if median > 0 else 0
@@ -442,6 +462,17 @@ def calculate_negotiation(listing, sold_prices, comps=None):
         text = f"Consider offering &pound;{low:,}"
         label = "overpriced"
 
+    # Grade-aware caps: weak evidence must not justify aggressive lowballs.
+    if grade in ("LOW", "UNSCORED"):
+        cap = caps.get("LOW", 0.05)
+        if label == "overpriced":
+            low = high = round(asking * (1 - cap))
+            text = f"Consider offering &pound;{low:,}&ndash;&pound;{high:,}"
+            label = "negotiate"
+        low = max(low, round(asking * (1 - cap)))
+    elif grade == "MEDIUM":
+        low = max(low, round(asking * (1 - caps.get("MEDIUM", 0.10))))
+
     return {
         "range_text": text,
         "low": low,
@@ -451,6 +482,67 @@ def calculate_negotiation(listing, sold_prices, comps=None):
         "label": label,
         "basis": basis,
         "count": comps.get("count", 0),
+        "grade": grade,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Clearing estimate (rating-trust)
+# ---------------------------------------------------------------------------
+
+def calculate_estimate(listing, comps, market_temp=None, caps=None, ranges=None):
+    """Estimate what a listing will *actually clear at* (rating-trust, issue 03).
+
+    Asking-anchored: starts at the asking price (sellers/agents price to the
+    market), then:
+
+      * market temperature nudges it (bounded at +/-3% and only when both a
+        recent and an older cohort exist);
+      * sold comparables may pull it *down* — only at MEDIUM/HIGH evidence
+        grade, and never past the grade's negotiation cap. LOW evidence
+        leaves the midpoint at asking; UNSCORED collapses to a point at
+        asking.
+
+    Returns {mid, low, high, grade, vs_asking, text}.
+    """
+    asking = listing["price"]
+    if caps is None:
+        caps = NEGOTIATION_CAPS
+    else:
+        caps = {str(k).upper(): v for k, v in caps.items()}
+    if ranges is None:
+        ranges = ESTIMATE_RANGE
+
+    grade = (comps or {}).get("grade") or "UNSCORED"
+
+    mid = float(asking)
+    if comps and comps.get("median") and grade != "LOW":
+        median = comps["median"]
+        ratio = asking / median if median > 0 else 1
+        cap = caps.get(grade, 0.10)
+        if ratio > 1 + cap:
+            mid = max(float(median), asking * (1 - cap))
+
+    if market_temp and market_temp.get("recent_count") and market_temp.get("older_count"):
+        change = market_temp.get("change_pct") or 0
+        change = max(-3.0, min(3.0, change))
+        mid = mid * (1 + change / 100)
+
+    mid = round(mid)
+    half = ranges.get(grade, 0.0)
+    low = round(mid * (1 - half))
+    high = round(mid * (1 + half))
+
+    return {
+        "mid": mid,
+        "low": low,
+        "high": high,
+        "grade": grade,
+        "vs_asking": round((mid - asking) / asking * 100, 1) if asking else 0,
+        "text": (
+            f"Estimate &pound;{low:,}&ndash;&pound;{high:,} "
+            f"({grade} evidence) &middot; asking &pound;{asking:,}"
+        ),
     }
 
 
@@ -475,24 +567,29 @@ def _smooth_score(ratio, breakpoints):
     return breakpoints[-1][1]
 
 
-def calculate_confidence(listing, sold_prices, all_listings, comps=None):
-    """Calculate a buying confidence score (0-100) from real evidence only.
+def calculate_confidence(listing, sold_prices, all_listings, comps=None, epc_map=None, caps=None):
+    """Calculate a deal-quality score (0-100) from real evidence only.
 
     Factors:
       1. Asking price vs sold-price comparables, best evidence tier (30%)
-      2. Price per sqft vs comparable average (25%, needs sold data)
+      2. Price per sqft vs EPC-matched comparable floor areas (25%)
       3. Price drop history (15%)
       4. Smart listing age — age × price drop combo (10%)
       5. Market context — vs current listings (20%)
 
     Uses smooth linear interpolation (no hard cliff edges between scores).
     A factor without evidence is EXCLUDED and the remaining weights are
-    rescaled to 100% — the score never pretends missing data is 'neutral'.
+    rescaled to 100%. Weak (LOW/MEDIUM-grade) comparable evidence is
+    down-weighted via GRADE_WEIGHTS rather than counted as full-strength
+    (rating-trust issues 02/05).
     ``comps`` is the best comparable tier from find_comparables(); when
     omitted it is derived here.
     """
     if comps is None:
         comps = find_comparables(listing, sold_prices)
+
+    grade = (comps or {}).get("grade") or "UNSCORED"
+    grade_mult = GRADE_WEIGHTS.get(grade, 1.0)
 
     sqft = listing.get("sqft")
     has_sqft = sqft and sqft > 0
@@ -524,34 +621,58 @@ def calculate_confidence(listing, sold_prices, all_listings, comps=None):
             "score": factor1,
             "detail": (
                 f"Asking is {ratio:.0%} of {comps['count']} sold comps "
-                f"({comps['label']}, median &pound;{median_price:,.0f})"
+                f"({comps['label']}, median &pound;{median_price:,.0f}, "
+                f"{grade} evidence)"
             ),
             "median": median_price,
             "avg": avg_price,
             "tier_label": comps["label"],
+            "grade": grade,
         }
-        active["area_median"] = w1
+        # Weak evidence is half-trusted, not full-trusted (rating-trust D3).
+        active["area_median"] = w1 * grade_mult
     else:
         breakdown["area_median"] = {
             "score": None,
             "detail": "No comparable sold prices &mdash; price fairness not scored",
         }
 
-    # --- Factor 2: Price per sqft vs comparable average ---
-    if has_sqft and "area_median" in active:
-        listing_sqft_price = listing["price"] / sqft
-        area_sqft_price = avg_price / 750 if avg_price else listing_sqft_price
-        sqft_ratio = listing_sqft_price / area_sqft_price if area_sqft_price > 0 else 1
-        factor2 = _smooth_score(sqft_ratio, [
-            (0.80, 100), (0.90, 85), (1.00, 65),
-            (1.10, 40),  (1.20, 15), (1.30, 0),
-        ])
+    # --- Factor 2: Price per sqft vs EPC-matched comparable floor areas ---
+    if has_sqft and "area_median" in active and comps:
+        matched = []
+        for s in comps.get("comps") or []:
+            area = _epc_lookup_floor_area(s, epc_map) if epc_map else None
+            if area:
+                matched.append((s["price"], float(area)))
+        comp_count = len(comps.get("comps") or [])
+        coverage = len(matched) / comp_count if comp_count else 0.0
+        if matched and coverage >= 0.60:
+            per_sqft = [p / (a * 10.7639) for p, a in matched]
+            area_sqft_price = statistics.median(per_sqft)
+            listing_sqft_price = listing["price"] / sqft
+            sqft_ratio = listing_sqft_price / area_sqft_price if area_sqft_price > 0 else 1
+            factor2 = _smooth_score(sqft_ratio, [
+                (0.80, 100), (0.90, 85), (1.00, 65),
+                (1.10, 40),  (1.20, 15), (1.30, 0),
+            ])
 
-        breakdown["sqft_value"] = {
-            "score": factor2,
-            "detail": f"&pound;{listing_sqft_price:,.0f}/sqft vs &pound;{area_sqft_price:,.0f}/sqft local average",
-        }
-        active["sqft_value"] = w2
+            breakdown["sqft_value"] = {
+                "score": factor2,
+                "detail": (
+                    f"&pound;{listing_sqft_price:,.0f}/sqft vs "
+                    f"&pound;{area_sqft_price:,.0f}/sqft EPC-matched median "
+                    f"({len(matched)} comps)"
+                ),
+            }
+            active["sqft_value"] = w2
+        else:
+            breakdown["sqft_value"] = {
+                "score": None,
+                "detail": (
+                    "No EPC floor-area data for comparables &mdash; "
+                    "size value not scored"
+                ),
+            }
     elif has_sqft:
         breakdown["sqft_value"] = {
             "score": None,
@@ -658,8 +779,9 @@ def calculate_confidence(listing, sold_prices, all_listings, comps=None):
         }
 
     # --- Rescale over the factors that actually had evidence ---
-    # Factor scores are on a 0-100 scale and weights sum to 1 across active
-    # factors, so the weighted mean stays on the 0-100 scale.
+    # Weak comparable evidence counts at reduced weight (GRADE_WEIGHTS); the
+    # weighted mean stays on the 0-100 scale.
+    breakdown["_weights"] = dict(active)
     total_weight = sum(active.values())
     if total_weight > 0:
         score = (
@@ -669,6 +791,7 @@ def calculate_confidence(listing, sold_prices, all_listings, comps=None):
     else:
         score = 0.0
     breakdown["_based_on"] = len(active)
+    breakdown["_grade"] = grade
 
     return round(score), breakdown
 
@@ -703,6 +826,31 @@ def estimate_mortgage(price):
         "legal_survey": legal_survey,
         "total_upfront": round(total_upfront),
     }
+
+
+def _comparables_grade(tier, count, newest_date_str):
+    """Rate the *quality* of a comparable-price basis (rating-trust, issue 02).
+
+    HIGH   = street-level (tier 0/1), >= 5 sales, newest within 12 months
+    MEDIUM = street-level with 3-4 sales, OR same-sector (tier 2) >= 8 sales
+    LOW    = district-tier (tier 3/4) or thin pools
+    UNSCORED is *not* produced here — no-comps callers handle it directly.
+    """
+    if tier in (0, 1):
+        fresh = False
+        try:
+            if newest_date_str:
+                fresh = (datetime.now() - datetime.strptime(newest_date_str, "%Y-%m-%d")).days <= 365
+        except (ValueError, TypeError):
+            fresh = False
+        if count >= 5 and fresh:
+            return "HIGH"
+        if count >= 3:
+            return "MEDIUM"
+        return "LOW"
+    if tier == 2:
+        return "MEDIUM" if count >= 8 else "LOW"
+    return "LOW"
 
 
 def find_comparables(listing, sold_prices, epc_map=None):
@@ -814,7 +962,11 @@ def find_comparables(listing, sold_prices, epc_map=None):
             "median": median,
         })
 
-    return tiers[0] if tiers else None
+    winner = tiers[0] if tiers else None
+    if winner is not None:
+        newest = (winner.get("comps") or [{}])[0].get("date") or ""
+        winner["grade"] = _comparables_grade(winner["tier"], winner["count"], newest)
+    return winner
 
 
 def _type_key(listing):
@@ -872,7 +1024,11 @@ def _listing_sector(address):
 
 
 def _epc_lookup_bedrooms(sale, epc_map):
-    """Bedroom count for a sold record via the EPC map, or None."""
+    """Bedroom count for a sold record via the EPC map, or None.
+
+    Backward-compatible with caches written before floor areas were stored
+    (value is then a plain int; new caches store {"beds": ..., "area_sqm": ...}).
+    """
     if not epc_map:
         return None
     key = (
@@ -880,7 +1036,29 @@ def _epc_lookup_bedrooms(sale, epc_map):
         (sale.get("street") or "").strip().lower(),
         (sale.get("paon") or "").strip().lower(),
     )
-    return epc_map.get(key)
+    value = epc_map.get(key)
+    if value is None:
+        return None
+    return value["beds"] if isinstance(value, dict) else value
+
+
+def _epc_lookup_floor_area(sale, epc_map):
+    """Floor area (square metres) for a sold record via the EPC map, or None.
+
+    Only available once the cache stores per-record dicts (issue 05). Legacy
+    int caches carry no floor area and return None.
+    """
+    if not epc_map:
+        return None
+    key = (
+        (sale.get("postcode") or "").upper().replace(" ", ""),
+        (sale.get("street") or "").strip().lower(),
+        (sale.get("paon") or "").strip().lower(),
+    )
+    value = epc_map.get(key)
+    if isinstance(value, dict):
+        return value.get("area_sqm")
+    return None
 
 
 def _load_epc_cache():
@@ -961,7 +1139,17 @@ def fetch_epc_bedrooms(district, config):
         pc = _col(row, "POSTCODE").upper().replace(" ", "")
         street = _col(row, "ADDRESS2", "ADDRESS3", "STREET").strip().lower()
         paon = _col(row, "ADDRESS1").strip().lower()
-        if pc and street:
+        if not (pc and street):
+            continue
+        # Store floor area when the record carries one (issue 05); legacy
+        # format remains a plain int for older caches / records without one.
+        floor = _col(row, "TOTAL_FLOOR_AREA", "TOTAL FLOOR AREA")
+        if floor and str(floor).strip().replace(".", "", 1).isdigit():
+            result[(pc, street, paon)] = {
+                "beds": int(bedrooms),
+                "area_sqm": float(floor),
+            }
+        else:
             result[(pc, street, paon)] = int(bedrooms)
     if not result:
         log(f"EPC: no bedroom data parsed for {district} — falling back to keyless tiers")
@@ -1231,6 +1419,133 @@ def find_alerts(current_listings, state):
     return new_listings, price_drops
 
 
+# ---------------------------------------------------------------------------
+# Sold / STC detection (rating-trust, issue 06)
+# ---------------------------------------------------------------------------
+
+def _match_sold_marker(text):
+    """Detect a sold/STC/under-offer marker in listing HTML text.
+
+    Returns one of "stc", "under_offer", "sold", or None. Comparative
+    phrases ("sold prices", "sold price history", "recently sold") must not
+    trigger a sale — the page is still for sale.
+    """
+    if not text:
+        return None
+    lower = text.lower()
+    if "sold stc" in lower:
+        return "stc"
+    if "under offer" in lower:
+        return "under_offer"
+    if re.search(r"\bsold\b", lower) and not any(
+        skip in lower
+        for skip in ("sold price", "sold prices", "sold history", "recently sold")
+    ):
+        return "sold"
+    return None
+
+
+def detect_listing_status(listing):
+    """Poll a listing's own detail page for a sold/STC/removed status.
+
+    Returns "stc" / "under_offer" / "sold" / "removed" / None (still listed)
+    / "error" (transient failure). Errors never imply a sale — the run's
+    existing miss-counter handles transient disappearances.
+    """
+    url = listing.get("url") or ""
+    if not url:
+        return None
+    try:
+        r = SESSION.get(url, timeout=20)
+    except Exception as e:
+        log(f"  status check failed for {listing.get('id')}: {e}")
+        return "error"
+    if r.status_code in (404, 410):
+        return "removed"
+    if r.status_code != 200:
+        return "error"
+    return _match_sold_marker(r.text)
+
+
+def _check_sold_statuses(listings, state):
+    """Check tracked listings for sold/STC/removed. Returns observed events.
+
+    Removal requires two consecutive "removed" polls (transient 404s happen);
+    sold/STC/under-offer fire immediately. Fetch errors leave state untouched.
+    """
+    seen = state.setdefault("seen", {})
+    events = []
+    for listing in listings:
+        lid = listing["id"]
+        if listing.get("source") not in SOLD_CHECK_SOURCES:
+            continue
+        status = detect_listing_status(listing)
+        if status == "error":
+            continue
+        entry = seen.get(lid)
+        if status == "removed":
+            if entry is None:
+                events.append({**listing, "status": "removed"})
+            else:
+                entry["removed_misses"] = entry.get("removed_misses", 0) + 1
+                if entry["removed_misses"] >= 2:
+                    events.append({**listing, "status": "removed"})
+            continue
+        if entry is not None:
+            entry["removed_misses"] = 0
+        if status in ("stc", "under_offer", "sold"):
+            events.append({**listing, "status": status})
+    return events
+
+
+def _record_sold(state, events):
+    """Move detected-sold listings from ``seen`` into ``sold`` + ``outcomes``.
+
+    Returns alert rows [{id, address, price, status, days_on_market}] for the
+    caller to log/notify.
+    """
+    seen = state.setdefault("seen", {})
+    sold = state.setdefault("sold", {})
+    outcomes = state.setdefault("outcomes", {})
+    rows = []
+    now_iso = datetime.now().isoformat()
+    for ev in events:
+        lid = ev["id"]
+        entry = seen.pop(lid, {})
+        first_seen = entry.get("first_seen") or now_iso
+        try:
+            days_on_market = max((datetime.now() - datetime.fromisoformat(first_seen)).days, 0)
+        except ValueError:
+            days_on_market = 0
+        status = ev["status"]
+        sold[lid] = {
+            "address": entry.get("address") or ev.get("address"),
+            "price": entry.get("price") or ev.get("price"),
+            "sqft": entry.get("sqft"),
+            "source": entry.get("source") or ev.get("source"),
+            "first_seen": first_seen,
+            "sold_date": now_iso,
+            "status": status,
+            "days_on_market": days_on_market,
+            "evidence_basis": entry.get("evidence_basis"),
+        }
+        outcomes.setdefault(lid, []).append({
+            "date": now_iso,
+            "status": status,
+            "days": days_on_market,
+            "note": None,
+            "source": "auto",
+        })
+        rows.append({
+            "id": lid,
+            "address": sold[lid]["address"],
+            "price": sold[lid]["price"],
+            "status": status,
+            "days_on_market": days_on_market,
+        })
+    return rows
+
+
 def send_email(config, new_listings, price_drops):
     """Send a single email containing all alerts."""
     email_cfg = config["email"]
@@ -1438,6 +1753,32 @@ def _sparkline(price_history):
     )
 
 
+def _sold_html(state):
+    """Render a 'sold while watching' section from state['sold']."""
+    sold = (state or {}).get("sold") or {}
+    if not sold:
+        return ""
+    items = sorted(sold.items(), key=lambda kv: kv[1].get("sold_date") or "", reverse=True)[:12]
+    cards = []
+    for _lid, e in items:
+        status = (e.get("status") or "sold").replace("_", " ").title()
+        price_txt = f"&pound;{e['price']:,}" if e.get("price") else "price unknown"
+        days = ""
+        if e.get("days_on_market") is not None:
+            days = f"&middot; {e['days_on_market']} days on market"
+        cards.append(
+            '<div class="off-card">'
+            f'<div class="off-addr">{e.get("address", "Unknown")}</div>'
+            f'<div class="off-meta">{status} &middot; {price_txt}</div>'
+            f'<div class="off-days">{days}</div>'
+            "</div>"
+        )
+    return (
+        '<div class="off-market"><h2>&#10003; Sold while watching</h2>'
+        f'<div class="off-market-grid">{"".join(cards)}</div></div>'
+    )
+
+
 def _off_market_html(state):
     """Render a 'recently off market' section from state (most recent first)."""
     if not state:
@@ -1509,8 +1850,15 @@ def _run_summary_html(state):
     return " &middot; ".join(parts)
 
 
-def _confidence_badge(score):
-    """Return CSS class and label for a confidence score."""
+def _confidence_badge(score, grade=None):
+    """Return CSS class and label for a deal-quality score.
+
+    At LOW/UNSCORED evidence the price verdict itself is not trustworthy, so
+    the badge can never call the house "Overpriced"/"Way Over" (rating-trust
+    issue 02) — it reports the score plus a "Low Evidence" label instead.
+    """
+    if grade in ("LOW", "UNSCORED"):
+        return "low", f"{score}", "Low Evidence"
     if score >= 80:
         return "great", f"{score}", "Great Deal"
     elif score >= 60:
@@ -1569,7 +1917,8 @@ def generate_html(listings, market_temps, state=None):
         mortgage = l.get("mortgage", {})
         negotiation = l.get("negotiation", {})
         conf_score = conf.get("score", 0)
-        badge_class, badge_text, badge_label = _confidence_badge(conf_score)
+        grade = l.get("evidence_grade") or (conf.get("breakdown") or {}).get("_grade")
+        badge_class, badge_text, badge_label = _confidence_badge(conf_score, grade)
         rank = l.get("rank", i + 1)
 
         # Rank badge with gap
@@ -1682,6 +2031,17 @@ def generate_html(listings, market_temps, state=None):
         elif neg_html:
             breakdown_html = neg_html
 
+        # Estimate + verdict note (rating-trust headline)
+        estimate_html = ""
+        estimate = l.get("estimate")
+        if estimate and estimate.get("text"):
+            est_class = "est-low" if estimate.get("grade") in ("LOW", "UNSCORED") else "est-ok"
+            estimate_html = f'<div class="estimate {est_class}">{estimate["text"]}</div>'
+        verdict_html = ""
+        verdict = l.get("verdict")
+        if verdict and verdict.get("revised"):
+            verdict_html = '<div class="revised">Score revised &mdash; evidence changed</div>'
+
         featured = ' featured' if rank == 1 else ''
         cards_html += f"""
         <div class="card{featured}">
@@ -1703,6 +2063,8 @@ def generate_html(listings, market_temps, state=None):
                         {l['bedrooms']} bed &middot; {l['type'].title()} &middot; {l['agent']}
                     </div>
                     <div class="address">{l['address']}</div>
+                    {estimate_html}
+                    {verdict_html}
                     <div class="details">
                         {size_badge}
                     </div>
@@ -1718,11 +2080,25 @@ def generate_html(listings, market_temps, state=None):
     # Summary stats
     scores = [l.get("confidence", {}).get("score", 0) for l in sorted_listings]
     avg_score = statistics.mean(scores) if scores else 0
-    great_count = sum(1 for s in scores if s >= 80)
-    fair_count = sum(1 for s in scores if 60 <= s < 80)
-    over_count = sum(1 for s in scores if s < 60)
+    great_count = 0
+    fair_count = 0
+    over_count = 0
+    low_count = 0
+    for l in sorted_listings:
+        s = l.get("confidence", {}).get("score", 0)
+        g = l.get("evidence_grade") or (l.get("confidence", {}).get("breakdown") or {}).get("_grade")
+        _label = _confidence_badge(s, g)[2]
+        if _label == "Great Deal":
+            great_count += 1
+        elif _label == "Fair Price":
+            fair_count += 1
+        elif _label == "Low Evidence":
+            low_count += 1
+        else:
+            over_count += 1
 
     off_html = _off_market_html(state)
+    sold_html = _sold_html(state)
     run_summary_html = _run_summary_html(state)
 
     html = f"""<!DOCTYPE html>
@@ -1768,6 +2144,11 @@ body {{ font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; b
 .confidence.fair {{ background: #f0fdfa; color: #0d9488; }}
 .confidence.over {{ background: #fffbeb; color: #d97706; }}
 .confidence.bad {{ background: #fef2f2; color: #dc2626; }}
+.confidence.low {{ background: #f5f5f4; color: #78716c; }}
+.confidence-label.low {{ color: #78716c; }}
+.estimate {{ font-size: 13px; font-weight: 600; color: #0d9488; margin-top: 8px; }}
+.estimate.est-low {{ color: #d97706; }}
+.revised {{ font-size: 11px; font-weight: 500; color: #d97706; margin-top: 4px; }}
 .confidence-label {{ font-size: 11px; font-weight: 500; }}
 .confidence-label.great {{ color: #059669; }}
 .confidence-label.fair {{ color: #0d9488; }}
@@ -1834,10 +2215,12 @@ body {{ font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; b
     <span class="great"><span class="num">{great_count}</span> Great Deals</span>
     <span class="fair"><span class="num">{fair_count}</span> Fair Price</span>
     <span class="over"><span class="num">{over_count}</span> Overpriced</span>
+    <span><span class="num">{low_count}</span> Low Evidence</span>
 </div>
 <div class="grid">
 {cards_html}
 </div>
+{sold_html}
 {off_html}
 <div class="footer">
     Updated {now} &middot; Auto-refreshes every 30 minutes &middot; Evidence-based scoring: only real data counts &middot; {run_summary_html}<br/>
@@ -1937,14 +2320,37 @@ def _collect_raw_listings(config):
     return all_listings, source_counts
 
 
-def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings, epc_map=None):
-    """Attach scoring inputs/results: first_seen, price history, comparables, scores."""
+def _verdict_category(score):
+    """Map a deal-quality score to a headline category band."""
+    if score >= 80:
+        return "great"
+    if score >= 60:
+        return "fair"
+    if score >= 40:
+        return "over"
+    return "bad"
+
+
+def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings,
+                    epc_map=None, market_temps=None, caps=None, sold_meta=None):
+    """Attach scoring inputs/results: first_seen, comparables, score, estimate.
+
+    ``sold_meta`` maps postcode area -> {"fetched": iso} when available, so
+    the persisted evidence basis records which cache the score relied on.
+
+    Also applies the wobble guard (issue 04): the headline category may only
+    flip commitment after it has been computed the same way in two
+    consecutive runs on an unchanged evidence basis; basis changes raise a
+    "score revised — evidence changed" note instead of silently whiplashing.
+    """
     area = extract_postcode_area(listing["address"])
     sold = sold_prices.get(area, []) if area else []
+    area_used = area
     if not sold:
         for a in postcode_areas:
             if sold_prices.get(a):
                 sold = sold_prices[a]
+                area_used = a
                 break
 
     entry = state.get("seen", {}).get(listing["id"], {})
@@ -1953,13 +2359,61 @@ def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings, e
     listing["price_history"] = history if isinstance(history, list) else None
     listing["relisted"] = listing["id"] in state.get("off_market", {})
 
-    comps = find_comparables(listing, sold, epc_map)
+    if caps is None:
+        caps = NEGOTIATION_CAPS
 
-    conf_score, conf_breakdown = calculate_confidence(listing, sold, all_listings, comps)
+    comps = find_comparables(listing, sold, epc_map)
+    grade = (comps or {}).get("grade") or "UNSCORED"
+    listing["evidence_grade"] = grade
+    listing["evidence_basis"] = {
+        "tier": comps["tier"] if comps else None,
+        "label": comps["label"] if comps else "no comparables",
+        "count": comps["count"] if comps else 0,
+        "grade": grade,
+        "area": area_used,
+        "cache_fetched": (sold_meta or {}).get(area_used, {}).get("fetched")
+        if area_used and area_used in (sold_meta or {}) else None,
+    }
+
+    conf_score, conf_breakdown = calculate_confidence(listing, sold, all_listings, comps, epc_map, caps)
     listing["comparables"] = comps["comps"] if comps else []
     listing["confidence"] = {"score": conf_score, "breakdown": conf_breakdown}
+
+    market_temp = None
+    if market_temps:
+        key = f"{area_used}|{_type_key(listing)}"
+        market_temp = market_temps.get(key) or market_temps.get(area_used)
+    listing["estimate"] = calculate_estimate(listing, comps, market_temp, caps=caps)
     listing["mortgage"] = estimate_mortgage(listing["price"])
-    listing["negotiation"] = calculate_negotiation(listing, sold, comps)
+    listing["negotiation"] = calculate_negotiation(listing, sold, comps, caps)
+
+    # --- Wobble guard: category commitment + basis-change note ---
+    prev = entry
+    prev_cat = prev.get("verdict_category")
+    prev_pending = prev.get("pending_verdict")
+    prev_basis = prev.get("evidence_basis")
+    basis_same = prev_basis == listing["evidence_basis"]
+    price_changed = "price" in prev and prev["price"] != listing["price"]
+
+    computed_cat = _verdict_category(conf_score)
+    if not prev_cat or price_changed:
+        category, pending = computed_cat, None
+    elif computed_cat == prev_cat:
+        category, pending = computed_cat, None
+    elif prev_pending and prev_pending.get("category") == computed_cat and basis_same:
+        # Second consecutive run computing the same new category -> commit.
+        category, pending = computed_cat, None
+    else:
+        # First run seeing a change -> hold, remember the pending flip.
+        category, pending = prev_cat, {"category": computed_cat, "since": datetime.now().isoformat()}
+
+    revised = (not basis_same) or (pending is not None)
+    listing["verdict"] = {
+        "category": category,
+        "pending": pending,
+        "revised": revised,
+        "computed": computed_cat,
+    }
 
 
 def _update_state(state, filtered, source_counts):
@@ -1973,12 +2427,13 @@ def _update_state(state, filtered, source_counts):
     # Persist current listings (preserving first_seen and price history)
     for listing in filtered:
         lid = listing["id"]
+        prior = seen.get(lid, {})
         history = []
         first_seen = now_iso
         if lid in off_market:
-            prior = off_market.pop(lid)
-            first_seen = prior.get("first_seen") or first_seen
-            history = prior.get("price_history") or []
+            prior_off = off_market.pop(lid)
+            first_seen = prior_off.get("first_seen") or first_seen
+            history = prior_off.get("price_history") or []
         elif lid in seen:
             first_seen = seen[lid].get("first_seen") or seen[lid].get("last_seen") or first_seen
             history = seen[lid].get("price_history") or []
@@ -1997,7 +2452,17 @@ def _update_state(state, filtered, source_counts):
             "last_seen": now_iso,
             "price_history": history,
             "misses": 0,
+            "removed_misses": prior.get("removed_misses", 0),
         }
+        # Rating-trust: persist the evidence basis + wobble-guard verdict
+        # so the next run can detect basis changes and hold category flips.
+        if "evidence_basis" in listing:
+            seen[lid]["evidence_basis"] = listing["evidence_basis"]
+        verdict = listing.get("verdict")
+        if isinstance(verdict, dict):
+            seen[lid]["verdict_category"] = verdict.get("category")
+            seen[lid]["pending_verdict"] = verdict.get("pending")
+            seen[lid]["verdict_revised"] = verdict.get("revised")
 
     # Promote listings absent for N consecutive runs to off-market
     for lid in list(seen.keys()):
@@ -2102,6 +2567,14 @@ def _run_cycle():
     filtered = filter_listings(all_listings, config)
     log(f"After filtering: {len(filtered)} listings")
 
+    # Never resurrect previously-sold listings (rating-trust, issue 01/06).
+    sold_ids = set(state.get("sold", {}).keys())
+    if sold_ids:
+        kept = [l for l in filtered if l["id"] not in sold_ids]
+        if len(kept) != len(filtered):
+            log(f"Excluded {len(filtered) - len(kept)} previously-sold listing(s)")
+            filtered = kept
+
     filtered = enrich_with_sqft(filtered)
 
     overrides = config.get("sqft_overrides", {})
@@ -2134,6 +2607,18 @@ def _run_cycle():
         if m:
             epc_maps[area] = m
 
+    # Sold-cache meta (fetch dates) so the persisted evidence basis records
+    # which cache each score relied on (rating-trust, issue 04).
+    sold_meta = {}
+    sold_cache = _load_sold_cache()
+    for area in postcode_areas:
+        cached = sold_cache.get(area)
+        if isinstance(cached, dict):
+            sold_meta[area] = {"fetched": cached.get("fetched")}
+
+    # Negotiation/estimate cap overrides (config negotiation_caps).
+    caps = {**NEGOTIATION_CAPS, **(config.get("negotiation_caps") or {})}
+
     # Market temperature per property type (terraced/semi move differently)
     market_temps = {}
     for area, sold in all_sold.items():
@@ -2149,10 +2634,27 @@ def _run_cycle():
     for listing in filtered:
         area = extract_postcode_area(listing["address"]) or next(iter(postcode_areas))
         _attach_derived(
-            listing, all_sold, postcode_areas, state, filtered, epc_maps.get(area)
+            listing, all_sold, postcode_areas, state, filtered,
+            epc_maps.get(area), market_temps, caps, sold_meta,
         )
 
     filtered.sort(key=lambda l: l["confidence"]["score"], reverse=True)
+
+    # --- Sold / STC detection (rating-trust, issue 06) ---
+    sold_rows = []
+    try:
+        sold_events = _check_sold_statuses(filtered, state)
+        sold_rows = _record_sold(state, sold_events)
+    except Exception as e:
+        log(f"SOLD-TRACKING ERROR: {e}")
+    if sold_rows:
+        sold_now = {r["id"] for r in sold_rows}
+        filtered = [l for l in filtered if l["id"] not in sold_now]
+        for r in sold_rows:
+            log(
+                f"  SOLD: {r['status'].upper()} - {r['address']} "
+                f"(&pound;{r['price']:,}) in {r['days_on_market']} day(s) on market"
+            )
 
     # --- Alerts ---
     new_listings, price_drops = find_alerts(filtered, state)
@@ -2193,16 +2695,98 @@ def _run_cycle():
     return status, {
         "new": len(new_listings),
         "drops": len(price_drops),
+        "sold": len(sold_rows),
         "filtered": len(filtered),
     }
 
 
-def main():
+def parse_args(argv=None):
+    """Parse CLI arguments (rating-trust issue 07 adds --outcome/--status)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Property watch monitor")
+    parser.add_argument(
+        "--server", action="store_true",
+        help="run the read-only dashboard server (binds 127.0.0.1)",
+    )
+    parser.add_argument("--port", type=int, default=8080, help="port for --server")
+    parser.add_argument(
+        "--outcome", metavar="LISTING_ID",
+        help="record a real-world outcome for a tracked listing",
+    )
+    parser.add_argument(
+        "--status", choices=["sold", "stc", "lost-bid", "withdrawn"],
+        help="outcome status (required with --outcome)",
+    )
+    parser.add_argument("--days", type=int, help="listing age in days at outcome")
+    parser.add_argument("--note", help="free-text note for the outcome")
+    return parser.parse_args(argv)
+
+
+def record_outcome(listing_id, status, days=None, note=None):
+    """Record a user-reported outcome in state.json (rating-trust, issue 07).
+
+    ``sold``/``stc`` transition the listing from ``seen`` into ``sold``; every
+    status appends to the top-level ``outcomes`` map. Unknown listing ids
+    raise ValueError.
+    """
+    state = load_state()
+    known = (
+        listing_id in state.get("seen", {})
+        or listing_id in state.get("sold", {})
+        or listing_id in state.get("off_market", {})
+    )
+    if not known:
+        raise ValueError(f"Unknown listing: {listing_id}")
+    seen = state.setdefault("seen", {})
+    outcomes = state.setdefault("outcomes", {})
+    now_iso = datetime.now().isoformat()
+    outcomes.setdefault(listing_id, []).append({
+        "date": now_iso,
+        "status": status,
+        "days": days,
+        "note": note,
+        "source": "user",
+    })
+    if status in ("sold", "stc") and listing_id in seen:
+        entry = seen.pop(listing_id)
+        sold = state.setdefault("sold", {})
+        sold[listing_id] = {
+            "address": entry.get("address"),
+            "price": entry.get("price"),
+            "sqft": entry.get("sqft"),
+            "source": entry.get("source"),
+            "first_seen": entry.get("first_seen") or now_iso,
+            "sold_date": now_iso,
+            "status": status,
+            "days_on_market": days if days is not None else 0,
+            "evidence_basis": entry.get("evidence_basis"),
+        }
+    save_state(state)
+    log(f"Outcome recorded: {listing_id} = {status}" + (f" ({note})" if note else ""))
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    if args.outcome:
+        if not args.status:
+            log("ERROR: --outcome requires --status (sold|stc|lost-bid|withdrawn)")
+            return 2
+        try:
+            record_outcome(args.outcome, args.status, days=args.days, note=args.note)
+        except ValueError as e:
+            log(f"ERROR: {e}")
+            return 2
+        return 0
+    if args.server:
+        run_server(args.port)
+        return 0
     status, summary = _run_cycle()
     if os.environ.get("PROPERTY_WATCH_SKIP_PUSH"):
         log("Skipping git push (PROPERTY_WATCH_SKIP_PUSH is set)")
     else:
         push_to_github()
+    return 0
 class PropertyHandler(BaseHTTPRequestHandler):
     """HTTP handler serving the generated dashboard (read-only)."""
 
@@ -2239,11 +2823,4 @@ def run_server(port=8080):
 
 
 if __name__ == "__main__":
-    if "--server" in sys.argv:
-        port = 8080
-        for arg in sys.argv:
-            if arg.startswith("--port="):
-                port = int(arg.split("=")[1])
-        run_server(port)
-    else:
-        main()
+    sys.exit(main())
