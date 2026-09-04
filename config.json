@@ -41,6 +41,18 @@
       "agent": "Watsons Property Services, Birstall",
       "image": "https://media.rightmove.co.uk/property-photo/69ca87186/91657857/69ca87186f0cf82272750024b864a608.jpeg",
       "sqft": 800
+    },
+    {
+      "id": "rm-92584293",
+      "source": "Rightmove",
+      "address": "Hadfield Road, Heckmondwike, WF16",
+      "price": 180000,
+      "bedrooms": 3,
+      "type": "semi-detached",
+      "url": "https://www.rightmove.co.uk/properties/92584293",
+      "agent": "Watsons Property Services, Birstall",
+      "image": "https://media.rightmove.co.uk/property-photo/b94fad930/92584293/b94fad930b81aa299fe5e44ed363f519.jpeg",
+      "sqft": null
     }
   ],
   "email": {
