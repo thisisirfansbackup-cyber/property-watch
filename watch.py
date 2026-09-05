@@ -1875,6 +1875,103 @@ def _confidence_badge(score, grade=None):
         return "bad", f"{score}", "Way Over"
 
 
+_CSS = """
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #fafaf9; color: #1c1917; min-height: 100vh; }
+.header { padding: 28px 24px 16px; border-bottom: 1px solid #e7e5e4; }
+.header h1 { font-size: 22px; font-weight: 700; color: #1c1917; letter-spacing: -0.3px; }
+.header .sub { font-size: 13px; color: #78716c; margin-top: 3px; }
+.header .count { font-size: 13px; color: #059669; margin-top: 4px; font-weight: 500; }
+.market-temp { display: flex; justify-content: center; gap: 10px; padding: 10px 24px; flex-wrap: wrap; border-bottom: 1px solid #e7e5e4; }
+.temp-item { font-size: 12px; padding: 4px 12px; border-radius: 20px; font-weight: 500; }
+.temp-item.rising { background: #ecfdf5; color: #059669; }
+.temp-item.stable { background: #f0fdfa; color: #0d9488; }
+.temp-item.cooling { background: #fffbeb; color: #d97706; }
+.summary { display: flex; justify-content: center; gap: 20px; padding: 12px 24px; border-bottom: 1px solid #e7e5e4; flex-wrap: wrap; font-size: 13px; color: #78716c; }
+.summary .num { font-weight: 700; }
+.summary .great .num { color: #059669; }
+.summary .fair .num { color: #0d9488; }
+.summary .over .num { color: #d97706; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+.card { background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e7e5e4; transition: box-shadow 0.2s; position: relative; }
+.card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+.card.featured { border-color: #059669; border-width: 1.5px; }
+.card-link { display: block; text-decoration: none; color: inherit; }
+.img-wrap { width: 100%; height: 180px; overflow: hidden; background: #d6d3d1; }
+.img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.info { padding: 16px 18px 14px; }
+.price-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.price { font-size: 26px; font-weight: 700; color: #1c1917; letter-spacing: -0.5px; }
+.old-price { font-size: 14px; color: #a8a29e; text-decoration: line-through; }
+.drop-arrow { color: #059669; font-size: 14px; margin-left: 4px; }
+.rating-row { display: flex; align-items: center; gap: 6px; }
+.confidence { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+.confidence.great { background: #ecfdf5; color: #059669; }
+.confidence.fair { background: #f0fdfa; color: #0d9488; }
+.confidence.over { background: #fffbeb; color: #d97706; }
+.confidence.bad { background: #fef2f2; color: #dc2626; }
+.confidence.low { background: #f5f5f4; color: #78716c; }
+.confidence-label.low { color: #78716c; }
+.estimate { font-size: 13px; font-weight: 600; color: #0d9488; margin-top: 8px; }
+.estimate.est-low { color: #d97706; }
+.revised { font-size: 11px; font-weight: 500; color: #d97706; margin-top: 4px; }
+.confidence-label { font-size: 11px; font-weight: 500; }
+.confidence-label.great { color: #059669; }
+.confidence-label.fair { color: #0d9488; }
+.confidence-label.over { color: #d97706; }
+.confidence-label.bad { color: #dc2626; }
+.rank-best { background: #ecfdf5; color: #059669; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #a7f3d0; }
+.rank { background: #f5f5f4; color: #78716c; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #e7e5e4; }
+.rank-gap { font-size: 11px; font-weight: 400; color: #a8a29e; }
+.meta { font-size: 13px; color: #78716c; margin-top: 10px; }
+.address { font-size: 15px; color: #1c1917; margin-top: 4px; font-weight: 500; line-height: 1.4; }
+.details { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.size { display: inline-block; background: #f5f5f4; color: #57534e; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; border: 1px solid #e7e5e4; }
+.size.unknown { color: #a8a29e; }
+.tag { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; z-index: 2; }
+.tag.new { background: #059669; color: #fff; }
+.tag.drop { background: #d97706; color: #fff; }
+.tag.relisted { background: #6366f1; color: #fff; }
+.spark { display: block; margin-top: 4px; }
+.off-market { max-width: 1200px; margin: 20px auto 0; padding: 0 24px; }
+.off-market h2 { font-size: 15px; font-weight: 600; color: #57534e; margin-bottom: 10px; }
+.off-market-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.off-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 8px; padding: 10px 14px; }
+.off-addr { font-size: 13px; font-weight: 500; color: #1c1917; }
+.off-meta { font-size: 12px; color: #a8a29e; margin-top: 2px; }
+.off-days { font-size: 11px; color: #78716c; margin-top: 2px; }
+.mortgage { padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }
+.mortgage-row { display: flex; justify-content: space-between; font-size: 13px; color: #78716c; padding: 2px 0; }
+.mortgage-val { color: #1c1917; font-weight: 600; }
+.details-toggle { padding: 12px 18px; border-top: 1px solid #f5f5f4; }
+.details-toggle summary { font-size: 12px; color: #78716c; cursor: pointer; font-weight: 500; }
+.details-toggle summary:hover { color: #1c1917; }
+.negotiation { padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }
+.neg-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #a8a29e; margin-bottom: 4px; }
+.neg-text { font-size: 14px; font-weight: 600; }
+.neg-text.strong { color: #059669; }
+.neg-text.fair { color: #0d9488; }
+.neg-text.negotiate { color: #d97706; }
+.neg-text.overpriced { color: #dc2626; }
+.neg-detail { font-size: 11px; color: #a8a29e; margin-top: 2px; }
+.breakdown { padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }
+.breakdown-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #a8a29e; margin-bottom: 8px; }
+.factor { margin-bottom: 8px; }
+.factor-label { font-size: 12px; color: #57534e; font-weight: 500; }
+.factor-detail { font-size: 11px; color: #a8a29e; margin-top: 1px; }
+.factor-bar { height: 4px; background: #e7e5e4; border-radius: 2px; margin-top: 4px; overflow: hidden; }
+.factor-fill { height: 100%; background: #059669; border-radius: 2px; }
+.empty { text-align: center; padding: 60px 24px; color: #a8a29e; font-size: 15px; }
+.footer { text-align: center; padding: 20px 24px; color: #a8a29e; font-size: 12px; border-top: 1px solid #e7e5e4; }
+@media (max-width: 768px) {
+    .grid { grid-template-columns: 1fr; padding: 16px; gap: 14px; }
+    .img-wrap { height: 160px; }
+    .price { font-size: 22px; }
+}
+"""
+
+
 def generate_html(listings, market_temps, state=None):
     """Generate a self-contained HTML dashboard with dynamic ratings."""
     sorted_listings = sorted(
@@ -2115,99 +2212,7 @@ def generate_html(listings, market_temps, state=None):
 <meta http-equiv="refresh" content="1800" />
 <title>Property Watch - Heckmondwike</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{ font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #fafaf9; color: #1c1917; min-height: 100vh; }}
-.header {{ padding: 28px 24px 16px; border-bottom: 1px solid #e7e5e4; }}
-.header h1 {{ font-size: 22px; font-weight: 700; color: #1c1917; letter-spacing: -0.3px; }}
-.header .sub {{ font-size: 13px; color: #78716c; margin-top: 3px; }}
-.header .count {{ font-size: 13px; color: #059669; margin-top: 4px; font-weight: 500; }}
-.market-temp {{ display: flex; justify-content: center; gap: 10px; padding: 10px 24px; flex-wrap: wrap; border-bottom: 1px solid #e7e5e4; }}
-.temp-item {{ font-size: 12px; padding: 4px 12px; border-radius: 20px; font-weight: 500; }}
-.temp-item.rising {{ background: #ecfdf5; color: #059669; }}
-.temp-item.stable {{ background: #f0fdfa; color: #0d9488; }}
-.temp-item.cooling {{ background: #fffbeb; color: #d97706; }}
-.summary {{ display: flex; justify-content: center; gap: 20px; padding: 12px 24px; border-bottom: 1px solid #e7e5e4; flex-wrap: wrap; font-size: 13px; color: #78716c; }}
-.summary .num {{ font-weight: 700; }}
-.summary .great .num {{ color: #059669; }}
-.summary .fair .num {{ color: #0d9488; }}
-.summary .over .num {{ color: #d97706; }}
-.grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 20px 24px; max-width: 1200px; margin: 0 auto; }}
-.card {{ background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e7e5e4; transition: box-shadow 0.2s; position: relative; }}
-.card:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,0.06); }}
-.card.featured {{ border-color: #059669; border-width: 1.5px; }}
-.card-link {{ display: block; text-decoration: none; color: inherit; }}
-.img-wrap {{ width: 100%; height: 180px; overflow: hidden; background: #d6d3d1; }}
-.img-wrap img {{ width: 100%; height: 100%; object-fit: cover; }}
-.info {{ padding: 16px 18px 14px; }}
-.price-row {{ display: flex; align-items: center; justify-content: space-between; gap: 8px; }}
-.price {{ font-size: 26px; font-weight: 700; color: #1c1917; letter-spacing: -0.5px; }}
-.old-price {{ font-size: 14px; color: #a8a29e; text-decoration: line-through; }}
-.drop-arrow {{ color: #059669; font-size: 14px; margin-left: 4px; }}
-.rating-row {{ display: flex; align-items: center; gap: 6px; }}
-.confidence {{ padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }}
-.confidence.great {{ background: #ecfdf5; color: #059669; }}
-.confidence.fair {{ background: #f0fdfa; color: #0d9488; }}
-.confidence.over {{ background: #fffbeb; color: #d97706; }}
-.confidence.bad {{ background: #fef2f2; color: #dc2626; }}
-.confidence.low {{ background: #f5f5f4; color: #78716c; }}
-.confidence-label.low {{ color: #78716c; }}
-.estimate {{ font-size: 13px; font-weight: 600; color: #0d9488; margin-top: 8px; }}
-.estimate.est-low {{ color: #d97706; }}
-.revised {{ font-size: 11px; font-weight: 500; color: #d97706; margin-top: 4px; }}
-.confidence-label {{ font-size: 11px; font-weight: 500; }}
-.confidence-label.great {{ color: #059669; }}
-.confidence-label.fair {{ color: #0d9488; }}
-.confidence-label.over {{ color: #d97706; }}
-.confidence-label.bad {{ color: #dc2626; }}
-.rank-best {{ background: #ecfdf5; color: #059669; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #a7f3d0; }}
-.rank {{ background: #f5f5f4; color: #78716c; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #e7e5e4; }}
-.rank-gap {{ font-size: 11px; font-weight: 400; color: #a8a29e; }}
-.meta {{ font-size: 13px; color: #78716c; margin-top: 10px; }}
-.address {{ font-size: 15px; color: #1c1917; margin-top: 4px; font-weight: 500; line-height: 1.4; }}
-.details {{ margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }}
-.size {{ display: inline-block; background: #f5f5f4; color: #57534e; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; border: 1px solid #e7e5e4; }}
-.size.unknown {{ color: #a8a29e; }}
-.tag {{ position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; z-index: 2; }}
-.tag.new {{ background: #059669; color: #fff; }}
-.tag.drop {{ background: #d97706; color: #fff; }}
-.tag.relisted {{ background: #6366f1; color: #fff; }}
-.spark {{ display: block; margin-top: 4px; }}
-.off-market {{ max-width: 1200px; margin: 20px auto 0; padding: 0 24px; }}
-.off-market h2 {{ font-size: 15px; font-weight: 600; color: #57534e; margin-bottom: 10px; }}
-.off-market-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }}
-.off-card {{ background: #fff; border: 1px solid #e7e5e4; border-radius: 8px; padding: 10px 14px; }}
-.off-addr {{ font-size: 13px; font-weight: 500; color: #1c1917; }}
-.off-meta {{ font-size: 12px; color: #a8a29e; margin-top: 2px; }}
-.off-days {{ font-size: 11px; color: #78716c; margin-top: 2px; }}
-.mortgage {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }}
-.mortgage-row {{ display: flex; justify-content: space-between; font-size: 13px; color: #78716c; padding: 2px 0; }}
-.mortgage-val {{ color: #1c1917; font-weight: 600; }}
-.details-toggle {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; }}
-.details-toggle summary {{ font-size: 12px; color: #78716c; cursor: pointer; font-weight: 500; }}
-.details-toggle summary:hover {{ color: #1c1917; }}
-.negotiation {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }}
-.neg-title {{ font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #a8a29e; margin-bottom: 4px; }}
-.neg-text {{ font-size: 14px; font-weight: 600; }}
-.neg-text.strong {{ color: #059669; }}
-.neg-text.fair {{ color: #0d9488; }}
-.neg-text.negotiate {{ color: #d97706; }}
-.neg-text.overpriced {{ color: #dc2626; }}
-.neg-detail {{ font-size: 11px; color: #a8a29e; margin-top: 2px; }}
-.breakdown {{ padding: 12px 18px; border-top: 1px solid #f5f5f4; background: #fafaf9; }}
-.breakdown-title {{ font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #a8a29e; margin-bottom: 8px; }}
-.factor {{ margin-bottom: 8px; }}
-.factor-label {{ font-size: 12px; color: #57534e; font-weight: 500; }}
-.factor-detail {{ font-size: 11px; color: #a8a29e; margin-top: 1px; }}
-.factor-bar {{ height: 4px; background: #e7e5e4; border-radius: 2px; margin-top: 4px; overflow: hidden; }}
-.factor-fill {{ height: 100%; background: #059669; border-radius: 2px; }}
-.empty {{ text-align: center; padding: 60px 24px; color: #a8a29e; font-size: 15px; }}
-.footer {{ text-align: center; padding: 20px 24px; color: #a8a29e; font-size: 12px; border-top: 1px solid #e7e5e4; }}
-@media (max-width: 768px) {{
-    .grid {{ grid-template-columns: 1fr; padding: 16px; gap: 14px; }}
-    .img-wrap {{ height: 160px; }}
-    .price {{ font-size: 22px; }}
-}}
+{_CSS}
 </style>
 </head>
 <body>
