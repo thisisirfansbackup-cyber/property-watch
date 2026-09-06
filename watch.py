@@ -1443,7 +1443,7 @@ def find_alerts(current_listings, state):
         lid = listing["id"]
         if lid not in seen:
             new_listings.append(listing)
-        elif listing["price"] < seen[lid]["price"]:
+        elif seen[lid].get("price") is not None and listing["price"] < seen[lid]["price"]:
             price_drops.append({**listing, "old_price": seen[lid]["price"]})
 
     return new_listings, price_drops
@@ -1469,13 +1469,19 @@ def _match_sold_marker(text):
     # on every listing page — it is not a status marker for this property.
     lower = lower.replace("recently sold & under offer", "")
     lower = lower.replace("recently sold and under offer", "")
-    if "sold stc" in lower:
+    if "sold stc" in lower or "sold subject to contract" in lower:
         return "stc"
     if "under offer" in lower:
         return "under_offer"
+    # A bare "sold" word can be historical/statistical boilerplate on pages
+    # that are STILL for sale ("Last sold: 2023", "sold in the last 12
+    # months") — only a standalone current-status "sold" counts.
     if re.search(r"\bsold\b", lower) and not any(
         skip in lower
-        for skip in ("sold price", "sold prices", "sold history", "recently sold")
+        for skip in (
+            "sold price", "sold prices", "sold history", "recently sold",
+            "last sold", "sold in", "sold for", "sold on", "previously sold",
+        )
     ):
         return "sold"
     return None
@@ -1520,12 +1526,15 @@ def _check_sold_statuses(listings, state):
             continue
         entry = seen.get(lid)
         if status == "removed":
+            # Only pages we were already tracking can leave the market: a
+            # never-tracked URL 404ing once is not confirmation of anything,
+            # and it carries no history worth archiving. Tracked listings
+            # still need two consecutive removals (transient 404s happen).
             if entry is None:
+                continue
+            entry["removed_misses"] = entry.get("removed_misses", 0) + 1
+            if entry["removed_misses"] >= 2:
                 events.append({**listing, "status": "removed"})
-            else:
-                entry["removed_misses"] = entry.get("removed_misses", 0) + 1
-                if entry["removed_misses"] >= 2:
-                    events.append({**listing, "status": "removed"})
             continue
         if entry is not None:
             entry["removed_misses"] = 0
@@ -1565,13 +1574,16 @@ def _record_sold(state, events):
             "days_on_market": days_on_market,
             "evidence_basis": entry.get("evidence_basis"),
         }
-        outcomes.setdefault(lid, []).append({
-            "date": now_iso,
-            "status": status,
-            "days": days_on_market,
-            "note": None,
-            "source": "auto",
-        })
+        if status != "removed":
+            # Only real outcome statuses (sold/stc/under_offer) get recorded
+            # as outcomes; a delisted URL is not an outcome.
+            outcomes.setdefault(lid, []).append({
+                "date": now_iso,
+                "status": status,
+                "days": days_on_market,
+                "note": None,
+                "source": "auto",
+            })
         rows.append({
             "id": lid,
             "address": sold[lid]["address"],
@@ -1790,29 +1802,45 @@ def _sparkline(price_history):
 
 
 def _sold_html(state):
-    """Render a 'sold while watching' section from state['sold']."""
+    """Render 'sold while watching' and (separately) 'removed from market'
+    sections. A delisted URL means the house left the market — not that it
+    sold — so the sections must not be conflated."""
     sold = (state or {}).get("sold") or {}
     if not sold:
         return ""
-    items = sorted(sold.items(), key=lambda kv: kv[1].get("sold_date") or "", reverse=True)[:12]
-    cards = []
-    for _lid, e in items:
-        status = (e.get("status") or "sold").replace("_", " ").title()
-        price_txt = f"&pound;{e['price']:,}" if e.get("price") else "price unknown"
-        days = ""
-        if e.get("days_on_market") is not None:
-            days = f"&middot; {e['days_on_market']} days on market"
-        cards.append(
-            '<div class="off-card">'
-            f'<div class="off-addr">{e.get("address", "Unknown")}</div>'
-            f'<div class="off-meta">{status} &middot; {price_txt}</div>'
-            f'<div class="off-days">{days}</div>'
-            "</div>"
+    items = sorted(sold.items(), key=lambda kv: kv[1].get("sold_date") or "", reverse=True)
+
+    def _cards(entries):
+        cards = []
+        for _lid, e in entries:
+            status = (e.get("status") or "sold").replace("_", " ").title()
+            price_txt = f"&pound;{e['price']:,}" if e.get("price") else "price unknown"
+            days = ""
+            if e.get("days_on_market") is not None:
+                days = f"&middot; {e['days_on_market']} days on market"
+            cards.append(
+                '<div class="off-card">'
+                f'<div class="off-addr">{e.get("address", "Unknown")}</div>'
+                f'<div class="off-meta">{status} &middot; {price_txt}</div>'
+                f'<div class="off-days">{days}</div>'
+                "</div>"
+            )
+        return cards
+
+    parts = []
+    sales = [kv for kv in items if (kv[1].get("status") or "sold") != "removed"][:12]
+    if sales:
+        parts.append(
+            '<div class="off-market"><h2>&#10003; Sold while watching</h2>'
+            f'<div class="off-market-grid">{"".join(_cards(sales))}</div></div>'
         )
-    return (
-        '<div class="off-market"><h2>&#10003; Sold while watching</h2>'
-        f'<div class="off-market-grid">{"".join(cards)}</div></div>'
-    )
+    removed = [kv for kv in items if (kv[1].get("status") or "") == "removed"][:12]
+    if removed:
+        parts.append(
+            '<div class="off-market"><h2>&#9200; Removed from market</h2>'
+            f'<div class="off-market-grid">{"".join(_cards(removed))}</div></div>'
+        )
+    return "\n".join(parts)
 
 
 def _off_market_html(state):
@@ -2609,12 +2637,12 @@ def _run_cycle():
     filtered = filter_listings(all_listings, config)
     log(f"After filtering: {len(filtered)} listings")
 
-    # Never resurrect previously-sold listings (rating-trust, issue 01/06).
+    # Never resurrect previously sold/removed listings (rating-trust 01/06).
     sold_ids = set(state.get("sold", {}).keys())
     if sold_ids:
         kept = [l for l in filtered if l["id"] not in sold_ids]
         if len(kept) != len(filtered):
-            log(f"Excluded {len(filtered) - len(kept)} previously-sold listing(s)")
+            log(f"Excluded {len(filtered) - len(kept)} previously sold/removed listing(s)")
             filtered = kept
 
     filtered = enrich_with_sqft(filtered)
@@ -2703,7 +2731,7 @@ def _run_cycle():
         filtered = [l for l in filtered if l["id"] not in sold_now]
         for r in sold_rows:
             log(
-                f"  SOLD: {r['status'].upper()} - {r['address']} "
+                f"  {r['status'].upper()}: {r['address']} "
                 f"(&pound;{r['price']:,}) in {r['days_on_market']} day(s) on market"
             )
 

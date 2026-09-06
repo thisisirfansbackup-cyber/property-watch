@@ -469,6 +469,21 @@ def test_match_sold_marker_nav_widget_not_a_sale():
     page3 = page + "<span>Under Offer</span>"
     assert watch._match_sold_marker(page3) == "under_offer"
 
+def test_match_sold_marker_ignores_historical_sold_boilerplate():
+    """Every active for-sale page carries 'last sold', 'sold in', 'sold for'
+    boilerplate (property history, local-stat strips). None of it means the
+    listing is currently sold — matching it archives a live house as SOLD."""
+    assert watch._match_sold_marker("Last sold: 28 Feb 2023") is None
+    assert watch._match_sold_marker("This property was last sold for £180,000 in 2020") is None
+    assert watch._match_sold_marker("Properties sold in the last 12 months in WF15") is None
+    assert watch._match_sold_marker("3 beds raised from ruin, sold in 2021") is None
+    assert watch._match_sold_marker("Previously sold on 12 May 2019") is None
+    # A genuine sold status on a retired page must still fire.
+    assert watch._match_sold_marker("This property has now been Sold") == "sold"
+
+
+def test_match_sold_marker_sold_subject_to_contract_is_stc():
+    assert watch._match_sold_marker("Sold Subject to Contract — 3 bed terraced") == "stc"
 
 def test_detect_listing_status_200_with_marker(monkeypatch):
     class FakeResp:
@@ -521,6 +536,68 @@ def test_check_sold_statuses_removed_requires_two_consecutive():
         assert len(events) == 1 and events[0]["status"] == "removed"
     finally:
         watch.detect_listing_status = orig
+
+
+def test_check_sold_statuses_untracked_removed_is_not_immediately_archived():
+    """A listing that was never tracked must not be archived as soon as its
+    URL 404s: a one-off delisting is not confirmation the house left the
+    market. The two-consecutive rule applies once the listing is tracked."""
+    state = {"seen": {}}
+    listing = {"id": "rm-new", "url": "u", "source": "Rightmove"}
+
+    def fake_status(l):
+        return "removed"
+
+    orig = watch.detect_listing_status
+    watch.detect_listing_status = fake_status
+    try:
+        assert watch._check_sold_statuses([listing], state) == []
+        assert state["seen"] == {}
+    finally:
+        watch.detect_listing_status = orig
+
+
+def test_record_sold_removed_archives_without_fabricating_outcome():
+    """A delisted URL means the house left the market — not that it sold.
+    Removing it from seen is right (it is no longer available), but writing
+    an outcomes row (sold/stc/lost-bid/withdrawn) would be a lie."""
+    now_iso = datetime.datetime.now().isoformat()
+    state = {
+        "seen": {
+            "rm-9": {
+                "price": 170000, "address": "Leyland Road, Batley, WF17",
+                "sqft": 872, "source": "Rightmove", "first_seen": now_iso,
+                "evidence_basis": {"tier": 3, "label": "same type, WF17 district"},
+            }
+        }
+    }
+    rows = watch._record_sold(
+        state,
+        [{"id": "rm-9", "status": "removed", "price": 170000,
+          "address": "Leyland Road, Batley, WF17"}],
+    )
+    assert "rm-9" not in state["seen"]
+    assert state["sold"]["rm-9"]["status"] == "removed"
+    assert rows[0]["status"] == "removed"
+    assert "rm-9" not in state.get("outcomes", {})
+
+
+def test_sold_html_renders_removed_apart_from_sales():
+    """'Sold while watching' must only contain real sales; delisted URLs go
+    into their own section instead of masquerading as sold houses."""
+    state = {
+        "sold": {
+            "rm-1": {"address": "Sold Road", "price": 170000, "status": "sold",
+                     "sold_date": "2026-09-01T00:00:00"},
+            "rm-2": {"address": "Gone Road", "price": 180000, "status": "removed",
+                     "sold_date": "2026-09-02T00:00:00"},
+        }
+    }
+    html = watch._sold_html(state)
+    assert "Sold while watching" in html
+    assert "Sold Road" in html
+    assert "Removed from market" in html
+    assert "Gone Road" in html
 
 
 def test_record_sold_moves_seen_to_sold_and_outcomes():

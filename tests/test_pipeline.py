@@ -191,3 +191,26 @@ def test_run_cycle_flags_degraded_when_sold_prices_unavailable(sandbox, monkeypa
     assert status == "degraded"
     state = json.loads((sandbox / "state_file.tmp").read_text())
     assert state["failed_runs"] == 1
+def test_find_alerts_new_and_price_drop():
+    state = {"seen": {"otm-111111": {"price": 180000}}}
+    new_listings, price_drops = watch.find_alerts([dict(LISTINGS[0]), dict(LISTINGS[1])], state)
+    assert [l["id"] for l in new_listings] == ["barkers-222222"]
+    assert [l["id"] for l in price_drops] == ["otm-111111"]
+    assert price_drops[0]["old_price"] == 180000
+
+
+def test_find_alerts_no_alerts_when_nothing_changed():
+    state = {"seen": {"otm-111111": {"price": LISTINGS[0]["price"]}}}
+    new_listings, price_drops = watch.find_alerts([dict(LISTINGS[0])], state)
+    assert new_listings == []
+    assert price_drops == []
+
+
+def test_find_alerts_lenient_when_legacy_seen_entry_has_no_price():
+    """A seen entry written before the price field existed must not crash the
+    whole run with a KeyError (alerts are the core goal; a stale state.json
+    must not silence them)."""
+    state = {"seen": {"otm-111111": {"address": "x"}}}
+    new_listings, price_drops = watch.find_alerts([dict(LISTINGS[0])], state)
+    assert new_listings == []
+    assert price_drops == []
