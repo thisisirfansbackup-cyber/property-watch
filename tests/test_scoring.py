@@ -56,6 +56,25 @@ def test_weighted_median_filters_by_type():
     assert watch._weighted_median(sales, "detached") == 0
 
 
+def test_weighted_median_weights_recent_sales_more():
+    """Fresh sales must outweigh 12-24 month-old sales in the median.
+
+    One fresh sale at 100k plus two 12-24-month-old sales at 200k/300k:
+    the fresh sale carries double weight, so the weighted median is 150k.
+    Treating all sales equally (plain median 200k) overstates what
+    comparable houses actually cleared at in a cooling market.
+    """
+    now = datetime.datetime.now()
+    fresh = (now - datetime.timedelta(days=30)).strftime("%Y-%m-%d")
+    stale = (now - datetime.timedelta(days=400)).strftime("%Y-%m-%d")
+    sales = [
+        make_sale(100000, fresh),
+        make_sale(200000, stale),
+        make_sale(300000, stale),
+    ]
+    assert watch._weighted_median(sales) == 150000
+
+
 def test_weighted_mean_basic():
     sales = [make_sale(100000, "2026-01-01"), make_sale(200000, "2026-01-01")]
     assert watch._weighted_mean(sales) == 150000

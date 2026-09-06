@@ -346,11 +346,13 @@ def _weighted_median(sold_prices, prop_type=None):
     if not filtered:
         return 0
 
-    # Expand each price by its weight (round to nearest 0.5)
+    # Expand each price by its weight (round to nearest 0.5). ``count`` is in
+    # 0.5-weight units (one copy = 0.5), floored at one copy so no sale is
+    # dropped entirely.
     expanded = []
     for s in filtered:
         w = _time_weight(s["date"])
-        count = max(1, round(w * 2) / 2)  # At least 1 entry
+        count = max(0.5, round(w * 2) / 2)  # At least 1 entry
         expanded.extend([s["price"]] * int(count * 2))
 
     return statistics.median(expanded) if expanded else 0
@@ -451,7 +453,8 @@ def calculate_negotiation(listing, sold_prices, comps=None, caps=None):
     ``caps`` bound how far below asking the guide may go (config
     ``negotiation_caps``). At LOW/UNSCORED evidence the guide never says
     "overpriced" and never suggests more than 5% under asking (rating-trust
-    issue 02); at MEDIUM it never suggests more than 10% under asking.
+    issue 02); at MEDIUM never more than 10% under asking; at HIGH never
+    more than 15% under asking.
     """
     if caps is None:
         caps = NEGOTIATION_CAPS
@@ -481,37 +484,47 @@ def calculate_negotiation(listing, sold_prices, comps=None, caps=None):
 
     low = 0
     high = 0
+    label = ""
     if asking <= median:
         low = int(asking * 0.97)
         high = int(asking)
-        text = f"Below average — strong offer &pound;{low:,}&ndash;&pound;{high:,}"
         label = "strong"
     elif vs_median_pct <= 5:
         low = int(median * 0.95)
         high = int(median)
-        text = f"Fair offer &pound;{low:,}&ndash;&pound;{high:,}"
         label = "fair"
     elif vs_median_pct <= 15:
         low = int(median)
         high = int(asking * 0.97)
-        text = f"Negotiate to &pound;{low:,}&ndash;&pound;{high:,}"
         label = "negotiate"
     else:
         low = int(median * 0.95)
         high = int(median * 0.95)
-        text = f"Consider offering &pound;{low:,}"
         label = "overpriced"
 
-    # Grade-aware caps: weak evidence must not justify aggressive lowballs.
+    # Grade-aware caps: weak evidence must not justify aggressive lowballs,
+    # and even HIGH evidence is bounded (NEGOTIATION_CAPS).
     if grade in ("LOW", "UNSCORED"):
         cap = caps.get("LOW", 0.05)
         if label == "overpriced":
             low = high = round(asking * (1 - cap))
-            text = f"Consider offering &pound;{low:,}&ndash;&pound;{high:,}"
             label = "negotiate"
         low = max(low, round(asking * (1 - cap)))
     elif grade == "MEDIUM":
         low = max(low, round(asking * (1 - caps.get("MEDIUM", 0.10))))
+    else:
+        low = max(low, round(asking * (1 - caps.get("HIGH", 0.15))))
+
+    # Render the text after capping so the advice shown always matches the
+    # returned low/high.
+    if label == "strong":
+        text = f"Below average — strong offer &pound;{low:,}&ndash;&pound;{high:,}"
+    elif label == "fair":
+        text = f"Fair offer &pound;{low:,}&ndash;&pound;{high:,}"
+    elif label == "negotiate":
+        text = f"Negotiate to &pound;{low:,}&ndash;&pound;{high:,}"
+    else:
+        text = f"Consider offering &pound;{low:,}"
 
     return {
         "range_text": text,

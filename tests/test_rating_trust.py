@@ -248,6 +248,31 @@ def test_negotiation_high_grade_still_allows_overpriced():
     assert neg["label"] == "overpriced"
 
 
+def test_negotiation_high_grade_capped_at_15pc():
+    """HIGH evidence may say 'overpriced', but the guide is still capped at
+    NEGOTIATION_CAPS['HIGH'] (15% under asking) — and the rendered text must
+    carry the capped number, not the uncapped comp-median figure."""
+    listing = leyland_listing()  # asking 170000, comps median 137500 (23.6% over)
+    comps = comps_with_grade("HIGH")
+    neg = watch.calculate_negotiation(listing, [], comps)
+    assert neg["label"] == "overpriced"
+    assert neg["low"] == 144500  # round(170000 * (1 - 0.15))
+    text = neg["range_text"].replace("&pound;", "\xa3")
+    assert "144,500" in text
+    assert "130,625" not in text
+
+
+def test_negotiation_medium_overpriced_text_carries_capped_low():
+    """The MEDIUM cap already binds the returned low; range_text (what the
+    dashboard actually shows) must not keep advertising the uncapped number."""
+    listing = leyland_listing()
+    comps = comps_with_grade("MEDIUM")
+    neg = watch.calculate_negotiation(listing, [], comps)
+    assert neg["low"] == 153000  # max(median*0.95, asking*0.90)
+    text = neg["range_text"].replace("&pound;", "\xa3")
+    assert "153,000" in text
+    assert "130,625" not in text
+
 
 # ---------------------------------------------------------------------------
 # Issue 07 acceptance: the Leyland Road replay
