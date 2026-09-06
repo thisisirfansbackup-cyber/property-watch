@@ -142,6 +142,16 @@ def load_state():
                         return json.load(f)
                 except (ValueError, OSError) as e2:
                     log(f"WARNING: {STATE_BAK.name} also unreadable ({e2}); starting fresh")
+    elif STATE_BAK.exists():
+        # state.json itself is missing (deleted, or a checkout dropped it).
+        # The backup is the previous good state — recover from it rather than
+        # start fresh and re-alert the whole market as NEW.
+        log(f"WARNING: {STATE_FILE.name} missing; recovering from {STATE_BAK.name}")
+        try:
+            with open(STATE_BAK) as f:
+                return json.load(f)
+        except (ValueError, OSError) as e3:
+            log(f"WARNING: {STATE_BAK.name} unreadable ({e3}); starting fresh")
     return {
         "seen": {},
         "off_market": {},

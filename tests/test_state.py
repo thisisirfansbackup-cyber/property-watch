@@ -147,3 +147,21 @@ def test_load_state_starts_fresh_when_both_state_and_backup_corrupt(tmp_path, mo
 
     assert state["seen"] == {}
     assert state["failed_runs"] == 0
+
+
+def test_load_state_recovers_from_backup_when_main_state_missing(tmp_path, monkeypatch):
+    """A deleted/missing state.json must not wipe tracker memory: the previous
+    good copy in state.json.bak is exactly the recovery source the backup
+    exists for. Starting fresh re-alerts every listing as NEW and loses the
+    sold/off-market history."""
+    state_file = tmp_path / "state.json"
+    bak_file = tmp_path / "state.json.bak"
+    monkeypatch.setattr(watch, "STATE_FILE", state_file)
+    monkeypatch.setattr(watch, "STATE_BAK", bak_file)
+    # state_file does NOT exist
+    bak_file.write_text(json.dumps({"seen": {"otm-1": {"price": 100000}}, "failed_runs": 2}))
+
+    state = watch.load_state()
+
+    assert state["seen"]["otm-1"]["price"] == 100000
+    assert state["failed_runs"] == 2
