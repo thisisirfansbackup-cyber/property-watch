@@ -2648,12 +2648,48 @@ def _run_cycle():
     log(f"After filtering: {len(filtered)} listings")
 
     # Never resurrect previously sold/removed listings (rating-trust 01/06).
-    sold_ids = set(state.get("sold", {}).keys())
+    # A REAL outcome (sold/stc/under_offer) is permanent; a "removed" archive is
+    # only "the URL was gone" — no sale happened, so a later re-listing must
+    # re-enter the dashboard rather than be silently ignored forever.
+    sold_ids = {
+        lid for lid, e in state.get("sold", {}).items()
+        if (e or {}).get("status") != "removed"
+    }
     if sold_ids:
         kept = [l for l in filtered if l["id"] not in sold_ids]
         if len(kept) != len(filtered):
-            log(f"Excluded {len(filtered) - len(kept)} previously sold/removed listing(s)")
+            log(f"Excluded {len(filtered) - len(kept)} previously sold/STC listing(s)")
             filtered = kept
+
+    # A listing archived as "removed" (delisted URL, no sale) that is advertised
+    # again has RE-LISTED. Move it straight back into ``seen`` preserving its
+    # original first_seen, and keep removed_misses elevated so the status poll
+    # later this run re-archives it immediately if the URL is still dead — a
+    # still-dead manual config entry must not fire a NEW alert every cycle.
+    for l in filtered:
+        archived = state.get("sold", {}).get(l["id"])
+        if not archived or archived.get("status") != "removed":
+            continue
+        del state["sold"][l["id"]]
+        seen = state.setdefault("seen", {})
+        prev = seen.get(l["id"], {})
+        first_seen = archived.get("first_seen") or prev.get("first_seen")
+        last_seen = archived.get("sold_date") or prev.get("last_seen") or datetime.now().isoformat()
+        history = prev.get("price_history")
+        if not history and archived.get("price"):
+            history = [{"date": last_seen, "price": archived["price"]}]
+        seen[l["id"]] = {
+            "price": l["price"],
+            "address": l["address"],
+            "sqft": l.get("sqft"),
+            "source": l.get("source"),
+            "first_seen": first_seen,
+            "last_seen": last_seen,
+            "price_history": history or [],
+            "misses": 0,
+            "removed_misses": 2,
+        }
+        log(f"Re-listed after removal, re-entering tracking: {l['id']}")
 
     filtered = enrich_with_sqft(filtered)
 

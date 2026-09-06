@@ -214,3 +214,82 @@ def test_find_alerts_lenient_when_legacy_seen_entry_has_no_price():
     new_listings, price_drops = watch.find_alerts([dict(LISTINGS[0])], state)
     assert new_listings == []
     assert price_drops == []
+
+
+def test_removed_listing_returns_to_market_reenters_tracking(sandbox):
+    """A listing archived as 'removed' (delisted URL, no sale happened) that
+    comes back on the portal must re-enter the dashboard — a re-listing is
+    exactly what the buyer must not miss. Sold/STC stays archived forever,
+    but 'removed' must not permanently blind the tracker. The listing
+    re-enters as a tracked card preserving its original first_seen (no
+    NEW-alert spam for a URL that may still be dead this run)."""
+    state = {
+        "sold": {
+            "rm-1": {
+                "status": "removed", "price": 170000,
+                "address": "Leyland Road, Batley, WF17",
+                "source": "Rightmove", "first_seen": "2026-08-01T00:00:00",
+                "sold_date": "2026-09-01T00:00:00", "days_on_market": 5,
+            }
+        },
+        "seen": {}, "off_market": {}, "run_history": [], "failed_runs": 0,
+    }
+    (sandbox / "state_file.tmp").write_text(json.dumps(state))
+
+    config = json.loads((sandbox / "config_file.tmp").read_text())
+    config["manual_listings"] = [{
+        "id": "rm-1", "source": "Rightmove",
+        "address": "Leyland Road, Batley, WF17", "price": 170000,
+        "bedrooms": 3, "type": "terraced", "url": "https://x/rm-1",
+        "agent": "A", "image": "", "sqft": 800,
+    }]
+    (sandbox / "config_file.tmp").write_text(json.dumps(config))
+
+    status, summary = watch._run_cycle()  # conftest stubs detect_listing_status -> None (alive)
+
+    assert status == "ok"
+    # otm + barkers are new; rm-1 re-enters silently as a tracked card.
+    assert summary["new"] == 2
+    state = json.loads((sandbox / "state_file.tmp").read_text())
+    assert "rm-1" in state["seen"]                 # re-entered tracking
+    assert "rm-1" not in state["sold"]             # stale 'removed' archive cleared
+    assert state["seen"]["rm-1"]["first_seen"] == "2026-08-01T00:00:00"
+    html = (sandbox / "html_file.tmp").read_text()
+    assert "Leyland Road, Batley" in html          # back on the dashboard
+
+
+def test_removed_listing_still_dead_does_not_flap_alerts(sandbox, monkeypatch):
+    """A manual listing that stays delisted (config still lists it, URL still
+    404s) must not alternate between NEW alerts and re-archival every cycle:
+    it is re-admitted, the status poll re-archives it in the same run, and no
+    alert fires."""
+    state = {
+        "sold": {
+            "rm-1": {
+                "status": "removed", "price": 170000,
+                "address": "Leyland Road, Batley, WF17",
+                "source": "Rightmove", "first_seen": "2026-08-01T00:00:00",
+                "sold_date": "2026-09-01T00:00:00", "days_on_market": 5,
+            }
+        },
+        "seen": {}, "off_market": {}, "run_history": [], "failed_runs": 0,
+    }
+    (sandbox / "state_file.tmp").write_text(json.dumps(state))
+
+    config = json.loads((sandbox / "config_file.tmp").read_text())
+    config["manual_listings"] = [{
+        "id": "rm-1", "source": "Rightmove",
+        "address": "Leyland Road, Batley, WF17", "price": 170000,
+        "bedrooms": 3, "type": "terraced", "url": "https://x/rm-1",
+        "agent": "A", "image": "", "sqft": 800,
+    }]
+    (sandbox / "config_file.tmp").write_text(json.dumps(config))
+    monkeypatch.setattr(watch, "detect_listing_status", lambda l: "removed")
+
+    status, summary = watch._run_cycle()
+
+    assert status == "ok"
+    assert summary["new"] == 2           # only otm + barkers; dead rm-1 not alerted
+    state = json.loads((sandbox / "state_file.tmp").read_text())
+    assert "rm-1" not in state["seen"]   # re-archived in the same run
+    assert state["sold"]["rm-1"]["status"] == "removed"
