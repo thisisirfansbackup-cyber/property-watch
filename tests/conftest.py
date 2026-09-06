@@ -63,6 +63,12 @@ SANDBOX_SOLD = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runtime_log(tmp_path, monkeypatch):
+    """Every test writes logs to a temp file, never the production alerts.log."""
+    monkeypatch.setattr(watch, "LOG_FILE", tmp_path / "alerts.log.tmp")
+
+
 @pytest.fixture
 def sandbox(tmp_path, monkeypatch):
     """Redirect runtime files to temp and stub all network/side-effect functions."""

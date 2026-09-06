@@ -181,3 +181,13 @@ def test_filter_listings_excludes_ids():
 def test_filter_listings_without_excluded_ids_keeps_all():
     kept = watch.filter_listings([dict(LISTINGS[0]), dict(LISTINGS[1])], CONFIG)
     assert [l["id"] for l in kept] == ["otm-111111", "barkers-222222"]
+def test_run_cycle_flags_degraded_when_sold_prices_unavailable(sandbox, monkeypatch):
+    """Score evidence silently vanishing must surface as a degraded run."""
+    monkeypatch.setattr(watch, "fetch_sold_prices", lambda area: [])
+    monkeypatch.setattr(watch, "fetch_epc_bedrooms", lambda area, config: None)
+
+    status, summary = watch._run_cycle()
+
+    assert status == "degraded"
+    state = json.loads((sandbox / "state_file.tmp").read_text())
+    assert state["failed_runs"] == 1

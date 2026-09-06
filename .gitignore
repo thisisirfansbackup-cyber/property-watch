@@ -16,5 +16,7 @@ sold_cache.json
 epc_cache.json
 web_additions.json
 alerts.log
+alerts.log.*
 state.json.bak
+state.json.tmp
 .pytest_cache/

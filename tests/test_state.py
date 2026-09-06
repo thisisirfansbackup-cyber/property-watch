@@ -1,4 +1,6 @@
 """Tests for state persistence: price history, off-market, re-listing."""
+import json
+
 import watch
 
 
@@ -100,3 +102,48 @@ def test_off_market_list_bounded():
     watch._update_state(state, [], {})
     watch._update_state(state, [], {})
     assert len(state["off_market"]) <= 30
+def test_save_state_is_atomic_and_backs_up_previous(tmp_path, monkeypatch):
+    """save_state must never leave a torn state.json, and .bak keeps the prior state."""
+    state_file = tmp_path / "state.json"
+    bak_file = tmp_path / "state.json.bak"
+    monkeypatch.setattr(watch, "STATE_FILE", state_file)
+    monkeypatch.setattr(watch, "STATE_BAK", bak_file)
+    state_file.write_text(json.dumps({"seen": {}, "failed_runs": 0}))
+
+    watch.save_state({"seen": {"otm-1": {"price": 100000}}, "failed_runs": 3})
+
+    state = json.loads(state_file.read_text())
+    assert state["seen"]["otm-1"]["price"] == 100000
+    assert state["failed_runs"] == 3
+    # The backup holds the previous state, and no temp file is left behind.
+    backup = json.loads(bak_file.read_text())
+    assert backup["seen"] == {}
+    assert not list(tmp_path.glob("state.json.tmp"))
+
+
+def test_load_state_falls_back_to_backup_on_corrupt_json(tmp_path, monkeypatch):
+    """A crash mid-write must not brick the pipeline: recover from state.json.bak."""
+    state_file = tmp_path / "state.json"
+    bak_file = tmp_path / "state.json.bak"
+    monkeypatch.setattr(watch, "STATE_FILE", state_file)
+    monkeypatch.setattr(watch, "STATE_BAK", bak_file)
+    state_file.write_text("{this is truncated json, not valid")
+    bak_file.write_text(json.dumps({"seen": {"otm-1": {"price": 100000}}}))
+
+    state = watch.load_state()
+
+    assert state["seen"]["otm-1"]["price"] == 100000
+
+
+def test_load_state_starts_fresh_when_both_state_and_backup_corrupt(tmp_path, monkeypatch):
+    state_file = tmp_path / "state.json"
+    bak_file = tmp_path / "state.json.bak"
+    monkeypatch.setattr(watch, "STATE_FILE", state_file)
+    monkeypatch.setattr(watch, "STATE_BAK", bak_file)
+    state_file.write_text("not json")
+    bak_file.write_text("also not json")
+
+    state = watch.load_state()
+
+    assert state["seen"] == {}
+    assert state["failed_runs"] == 0

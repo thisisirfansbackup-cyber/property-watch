@@ -46,6 +46,7 @@ OFF_MARKET_MAX = 30                # most recent "off market" entries kept in st
 MISSING_RUNS_BEFORE_OFF_MARKET = 2 # consecutive misses before a listing is marked off-market
 PRICE_HISTORY_MAX = 12             # per-listing price points retained
 WATCHDOG_FAIL_THRESHOLD = 3        # consecutive degraded runs before a watchdog alert fires
+LOG_MAX_BYTES = 5 * 1024 * 1024    # rotate alerts.log past ~5 MB to keep it bounded
 
 # Sold-price comparables tunables
 COMP_MIN_COUNT = 3                 # minimum sales before a comparison tier counts as evidence
@@ -128,8 +129,19 @@ def get_secret(config, env_name, cfg_path):
 
 def load_state():
     if STATE_FILE.exists():
-        with open(STATE_FILE) as f:
-            return json.load(f)
+        try:
+            with open(STATE_FILE) as f:
+                return json.load(f)
+        except (ValueError, OSError) as e:
+            # A crashed/concurrent write must not brick the pipeline: fall back
+            # to the previous-good copy before starting fresh.
+            log(f"WARNING: {STATE_FILE.name} unreadable ({e}); trying {STATE_BAK.name}")
+            if STATE_BAK.exists():
+                try:
+                    with open(STATE_BAK) as f:
+                        return json.load(f)
+                except (ValueError, OSError) as e2:
+                    log(f"WARNING: {STATE_BAK.name} also unreadable ({e2}); starting fresh")
     return {
         "seen": {},
         "off_market": {},
@@ -142,16 +154,34 @@ def load_state():
 
 
 def save_state(state):
+    """Write state atomically (write tmp, then rename) so a crash never leaves a torn file."""
     if STATE_FILE.exists():
         shutil.copy2(STATE_FILE, STATE_BAK)
-    with open(STATE_FILE, "w") as f:
+    tmp = STATE_FILE.with_name(STATE_FILE.name + ".tmp")
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
+    os.replace(tmp, STATE_FILE)
+
+
+def _rotate_log():
+    """Keep a single rotated alert log; rotation must never crash a run."""
+    if not LOG_FILE.exists():
+        return
+    try:
+        if LOG_FILE.stat().st_size >= LOG_MAX_BYTES:
+            rotated = LOG_FILE.with_name(LOG_FILE.name + ".1")
+            if rotated.exists():
+                rotated.unlink()
+            os.replace(LOG_FILE, rotated)
+    except OSError:
+        pass
 
 
 def log(msg):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line, flush=True)
+    _rotate_log()
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
@@ -2513,19 +2543,20 @@ def _source_medians(history):
     return medians
 
 
-def _assess_health(config, state, source_counts, filtered_count):
+def _assess_health(config, state, source_counts, filtered_count, extra_failures=None):
     """Track run health; alert via Telegram on repeated degraded runs.
 
     A run is degraded if: every source returned 0, a source returned 0 when it
-    normally returns >=1, or the filtered count collapses by >=50% vs the
-    rolling median. Returns True when the run is healthy.
+    normally returns >=1, the filtered count collapses by >=50% vs the rolling
+    median, or ``extra_failures`` reports broken evidence feeds (sold prices,
+    EPC). Returns True when the run is healthy.
     """
     now_iso = datetime.now().isoformat()
     history = state.setdefault("run_history", [])
     history.append({"ts": now_iso, "sources": dict(source_counts), "filtered": filtered_count})
     state["run_history"] = history[-14:]
 
-    failures = []
+    failures = list(extra_failures or [])
     total_raw = sum(source_counts.values()) if source_counts else 0
     if total_raw == 0:
         failures.append("all configured sources returned 0 listings")
@@ -2618,6 +2649,15 @@ def _run_cycle():
         if m:
             epc_maps[area] = m
 
+    # Evidence-pipeline health: scores silently degrade when the sold-price or
+    # EPC feeds fail, so flag it like any other source failure. Only all-empty
+    # counts — a single quiet district is normal; a full outage means LR/EPC down.
+    evidence_failures = []
+    if postcode_areas and all(not v for v in all_sold.values()):
+        evidence_failures.append("sold prices empty for all areas (Land Registry fetch down?)")
+    if _epc_settings(config) and postcode_areas and all(a not in epc_maps for a in postcode_areas):
+        evidence_failures.append("EPC data missing for all areas (configured but not populating)")
+
     # Sold-cache meta (fetch dates) so the persisted evidence basis records
     # which cache each score relied on (rating-trust, issue 04).
     sold_meta = {}
@@ -2694,7 +2734,7 @@ def _run_cycle():
 
     # --- State persistence ---
     _update_state(state, filtered, source_counts)
-    healthy = _assess_health(config, state, source_counts, len(filtered))
+    healthy = _assess_health(config, state, source_counts, len(filtered), evidence_failures)
     state["last_run"] = datetime.now().isoformat()
     save_state(state)
 

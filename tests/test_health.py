@@ -54,3 +54,26 @@ def test_watchdog_threshold_crossed_sends_alert(monkeypatch):
         watch._assess_health(config, state, {"ontemarket": 0, "barkers": 0}, 0)
     assert len(sent) == 1
     assert "PROPERTY WATCH PROBLEM" in sent[0][2]
+def test_evidence_failures_mark_run_degraded_and_alert_after_threshold(monkeypatch):
+    """Sold-price/EPC feed failures must count toward the watchdog like source failures."""
+    config = {"telegram": {"chat_id": "123"}}
+    monkeypatch.setattr(watch, "get_secret", lambda cfg, env, path: "fake-token")
+    sent = []
+    monkeypatch.setattr(
+        watch, "_telegram_send_message",
+        lambda token, chat_id, text: sent.append((token, chat_id, text)) or True,
+    )
+    state = {}
+    ok = watch._assess_health(
+        config, state, {"ontemarket": 5}, 5,
+        extra_failures=["sold prices empty for all areas (Land Registry fetch down?)"],
+    )
+    assert not ok
+    assert state["failed_runs"] == 1
+
+    for _ in range(watch.WATCHDOG_FAIL_THRESHOLD - 1):
+        watch._assess_health(
+            config, state, {"ontemarket": 5}, 5,
+            extra_failures=["sold prices empty for all areas (Land Registry fetch down?)"],
+        )
+    assert len(sent) == 1
