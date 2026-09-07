@@ -1,5 +1,6 @@
 """Unit tests for the pure scoring / negotiation / mortgage / comparables math."""
 import datetime
+import json
 
 import pytest
 
@@ -116,6 +117,35 @@ def test_estimate_mortgage_stamp_duty_applies():
     m = watch.estimate_mortgage(350000)
     assert m["stamp_duty"] > 0
     assert m["loan"] == 305000
+
+
+def test_fetch_sold_prices_falls_back_to_cache_when_fetch_fails(tmp_path, monkeypatch):
+    """A Land Registry fetch error (network blip / timeout) must not wipe the
+    scored evidence: return the previous good cached data, exactly like the
+    empty-fetch path, instead of [] which silently degrades every listing to
+    UNSCORED for the run."""
+    cache_file = tmp_path / "sold_cache.json"
+    monkeypatch.setattr(watch, "SOLD_CACHE_FILE", cache_file)
+    cache_file.write_text(json.dumps({
+        "WF15": {"fetched": "2026-05-01T00:00:00", "data": [
+            {"price": 150000, "date": "2026-06-01", "type": "terraced",
+             "street": "FIRTHCLIFFE ROAD", "town": "LIVERSEDGE"},
+        ]},
+    }))
+    calls = []
+
+    class BoomSession:
+        def get(self, *a, **k):
+            calls.append(k.get("timeout"))
+            raise OSError("network down")
+
+    monkeypatch.setattr(watch, "SESSION", BoomSession())
+
+    result = watch.fetch_sold_prices("WF15")
+
+    assert len(result) == 1
+    assert result[0]["price"] == 150000
+    assert calls, "the fetch was attempted"
 
 
 def test_negotiation_insufficient_data():

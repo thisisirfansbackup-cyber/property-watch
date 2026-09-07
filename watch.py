@@ -246,7 +246,10 @@ def fetch_sold_prices(postcode_area):
         r.raise_for_status()
     except Exception as e:
         log(f"Land Registry fetch failed: {e}")
-        return []
+        # A network blip must not wipe the scored evidence for this run: fall
+        # back to the previous good cache (same path as an empty fetch below).
+        cached = cache.get(cache_key, {})
+        return cached.get("data", [])
 
     rows = list(csv.reader(io.StringIO(r.text)))
     # Some PPD exports have a header row, some do not; detect by checking
