@@ -6,7 +6,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249490",
-      "last_seen": "2026-09-07T13:13:43.199751",
+      "last_seen": "2026-09-07T18:19:06.122108",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -21,7 +21,7 @@
         "count": 181,
         "grade": "LOW",
         "area": "WF13",
-        "cache_fetched": "2026-09-07T13:13:36.995713"
+        "cache_fetched": "2026-09-07T18:19:02.356584"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -33,7 +33,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-07T13:13:43.199751",
+      "last_seen": "2026-09-07T18:19:06.122108",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -48,12 +48,12 @@
         "count": 171,
         "grade": "LOW",
         "area": "WF15",
-        "cache_fetched": "2026-09-07T13:13:41.273419"
+        "cache_fetched": "2026-09-07T18:19:06.089645"
       },
       "verdict_category": "fair",
       "pending_verdict": {
         "category": "over",
-        "since": "2026-09-07T13:13:41.301422"
+        "since": "2026-09-07T18:19:06.121988"
       },
       "verdict_revised": true
     },
@@ -63,7 +63,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-07T13:13:43.199751",
+      "last_seen": "2026-09-07T18:19:06.122108",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -78,7 +78,7 @@
         "count": 181,
         "grade": "LOW",
         "area": "WF13",
-        "cache_fetched": "2026-09-07T13:13:36.995713"
+        "cache_fetched": "2026-09-07T18:19:02.356584"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -90,7 +90,7 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-07T13:13:43.199751",
+      "last_seen": "2026-09-07T18:19:06.122108",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -105,12 +105,12 @@
         "count": 181,
         "grade": "LOW",
         "area": "WF13",
-        "cache_fetched": "2026-09-07T13:13:36.995713"
+        "cache_fetched": "2026-09-07T18:19:02.356584"
       },
       "verdict_category": "fair",
       "pending_verdict": {
         "category": "over",
-        "since": "2026-09-07T13:13:41.299868"
+        "since": "2026-09-07T18:19:06.120682"
       },
       "verdict_revised": true
     },
@@ -120,7 +120,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-03T11:45:07.412655",
-      "last_seen": "2026-09-07T13:13:43.199751",
+      "last_seen": "2026-09-07T18:19:06.122108",
       "price_history": [
         {
           "date": "2026-09-03T11:45:07.412655",
@@ -135,7 +135,7 @@
         "count": 5,
         "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": "2026-09-07T13:13:41.273419"
+        "cache_fetched": "2026-09-07T18:19:06.089645"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -154,7 +154,7 @@
           "price": 170000
         }
       ],
-      "misses": 0,
+      "misses": 1,
       "removed_misses": 0,
       "evidence_basis": {
         "tier": 1,
@@ -171,40 +171,13 @@
       },
       "verdict_revised": true
     },
-    "otm-19007492": {
-      "price": 220000,
-      "address": "Lascelles Road, Heckmondwike",
-      "sqft": 875,
-      "source": "OnTheMarket",
-      "first_seen": "2026-09-02T22:15:07.249499",
-      "last_seen": "2026-09-06T21:31:06.967325",
-      "price_history": [
-        {
-          "date": "2026-09-02T22:30:06.289067",
-          "price": 220000
-        }
-      ],
-      "misses": 1,
-      "removed_misses": 0,
-      "evidence_basis": {
-        "tier": 3,
-        "label": "same type, local area",
-        "count": 175,
-        "grade": "LOW",
-        "area": "WF15",
-        "cache_fetched": "2026-09-06T21:31:01.193446"
-      },
-      "verdict_category": "bad",
-      "pending_verdict": null,
-      "verdict_revised": true
-    },
     "otm-20278336": {
       "price": 219950,
       "address": "LONGFIELD COURT, HECKMONDWIKE",
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-09-07T13:13:43.199751",
+      "last_seen": "2026-09-07T18:19:06.122108",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -219,14 +192,14 @@
         "count": 103,
         "grade": "LOW",
         "area": "WF13",
-        "cache_fetched": "2026-09-07T13:13:36.995713"
+        "cache_fetched": "2026-09-07T18:19:02.356584"
       },
       "verdict_category": "bad",
       "pending_verdict": null,
       "verdict_revised": true
     }
   },
-  "last_run": "2026-09-07T13:13:43.199906",
+  "last_run": "2026-09-07T18:19:06.122193",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -273,17 +246,23 @@
       "first_seen": null,
       "last_seen": "2026-09-02T10:45:05.831038",
       "price_history": []
+    },
+    "otm-19007492": {
+      "address": "Lascelles Road, Heckmondwike",
+      "price": 220000,
+      "sqft": 875,
+      "source": "OnTheMarket",
+      "first_seen": "2026-09-02T22:15:07.249499",
+      "last_seen": "2026-09-06T21:31:06.967325",
+      "price_history": [
+        {
+          "date": "2026-09-02T22:30:06.289067",
+          "price": 220000
+        }
+      ]
     }
   },
   "run_history": [
-    {
-      "ts": "2026-09-04T22:45:06.466389",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 6
-    },
     {
       "ts": "2026-09-04T23:00:06.086905",
       "sources": {
@@ -387,10 +366,18 @@
         "barkers": 120
       },
       "filtered": 7
+    },
+    {
+      "ts": "2026-09-07T18:19:06.122155",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 6
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-09-07T13:13:43.199858",
+  "last_successful_run": "2026-09-07T18:19:06.122155",
   "sold": {
     "rm-91657857": {
       "address": "Leyland Road, Batley, WF17",
