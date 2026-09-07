@@ -420,6 +420,44 @@ def test_epc_lookup_floor_area():
     assert watch._epc_lookup_floor_area(sale, {("WF158AN", "firthcliffe road", "12"): 3}) is None
 
 
+def test_epc_cache_survives_json_roundtrip(tmp_path, monkeypatch):
+    """The EPC map is keyed by (postcode, street, paon) tuples, which json
+    cannot serialize. A fresh fetch must persist to disk without crashing
+    (a TypeError here kills the whole run), and a later run reading the
+    persisted cache must still find the same bedroom/floor-area lookups —
+    otherwise tier-0 '3-bed, same street' evidence silently degrades to
+    keyless tiers every run after the first."""
+    class FakeResp:
+        text = (
+            "POSTCODE,ADDRESS1,ADDRESS2,TOTAL_FLOOR_AREA,BEDROOMS\n"
+            "WF15 8AN,12,FIRTHCLIFFE ROAD,70.0,3\n"
+            "WF15 8AN,14,FIRTHCLIFFE ROAD,80.0,3\n"
+            "WF15 8AN,16,FIRTHCLIFFE ROAD,75.0,3\n"
+        )
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def get(self, *a, **k):
+            return FakeResp()
+
+    monkeypatch.setattr(watch, "SESSION", FakeSession())
+    monkeypatch.setattr(watch, "EPC_CACHE_FILE", tmp_path / "epc_cache.json")
+    config = {"epc": {"email": "e@example.com", "api_key": "k"}}
+    sale = {"postcode": "WF15 8AN", "street": "Firthcliffe Road", "paon": "12"}
+
+    # First call: fresh network fetch, saved to the cache file.
+    m1 = watch.fetch_epc_bedrooms("WF15", config)
+    assert m1 is not None
+    assert watch._epc_lookup_bedrooms(sale, m1) == 3
+
+    # Second call: served from the persisted cache (fresh within EPC_CACHE_DAYS).
+    m2 = watch.fetch_epc_bedrooms("WF15", config)
+    assert watch._epc_lookup_bedrooms(sale, m2) == 3
+    assert watch._epc_lookup_floor_area(sale, m2) == 70.0
+
+
 def test_factor2_uses_real_epc_sizes_when_coverage_sufficient():
     sales = [
         make_sale(150000, recent_date(10), paon="12"),

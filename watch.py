@@ -1076,6 +1076,17 @@ def _listing_sector(address):
     return _postcode_sector(m.group(0)) if m else ""
 
 
+def _epc_key(pc, street, paon):
+    """JSON-safe lookup key for the EPC map.
+
+    The map is keyed by (postcode, street, paon) tuples, which json.dump
+    cannot serialize — a TypeError there would crash the whole run. The
+    persisted cache therefore stores keys flattened into a string; fields are
+    normalized before this call, so the join is lossless.
+    """
+    return "\x1f".join((pc, street, paon))
+
+
 def _epc_lookup_bedrooms(sale, epc_map):
     """Bedroom count for a sold record via the EPC map, or None.
 
@@ -1084,12 +1095,13 @@ def _epc_lookup_bedrooms(sale, epc_map):
     """
     if not epc_map:
         return None
-    key = (
-        (sale.get("postcode") or "").upper().replace(" ", ""),
-        (sale.get("street") or "").strip().lower(),
-        (sale.get("paon") or "").strip().lower(),
-    )
-    value = epc_map.get(key)
+    pc = (sale.get("postcode") or "").upper().replace(" ", "")
+    street = (sale.get("street") or "").strip().lower()
+    paon = (sale.get("paon") or "").strip().lower()
+    value = epc_map.get((pc, street, paon))
+    if value is None:
+        # A cache reloaded from JSON has flattened string keys.
+        value = epc_map.get(_epc_key(pc, street, paon))
     if value is None:
         return None
     return value["beds"] if isinstance(value, dict) else value
@@ -1103,12 +1115,13 @@ def _epc_lookup_floor_area(sale, epc_map):
     """
     if not epc_map:
         return None
-    key = (
-        (sale.get("postcode") or "").upper().replace(" ", ""),
-        (sale.get("street") or "").strip().lower(),
-        (sale.get("paon") or "").strip().lower(),
-    )
-    value = epc_map.get(key)
+    pc = (sale.get("postcode") or "").upper().replace(" ", "")
+    street = (sale.get("street") or "").strip().lower()
+    paon = (sale.get("paon") or "").strip().lower()
+    value = epc_map.get((pc, street, paon))
+    if value is None:
+        # A cache reloaded from JSON has flattened string keys.
+        value = epc_map.get(_epc_key(pc, street, paon))
     if isinstance(value, dict):
         return value.get("area_sqm")
     return None
@@ -1197,13 +1210,14 @@ def fetch_epc_bedrooms(district, config):
         # Store floor area when the record carries one (issue 05); legacy
         # format remains a plain int for older caches / records without one.
         floor = _col(row, "TOTAL_FLOOR_AREA", "TOTAL FLOOR AREA")
+        key = _epc_key(pc, street, paon)
         if floor and str(floor).strip().replace(".", "", 1).isdigit():
-            result[(pc, street, paon)] = {
+            result[key] = {
                 "beds": int(bedrooms),
                 "area_sqm": float(floor),
             }
         else:
-            result[(pc, street, paon)] = int(bedrooms)
+            result[key] = int(bedrooms)
     if not result:
         log(f"EPC: no bedroom data parsed for {district} — falling back to keyless tiers")
         return None
