@@ -148,6 +148,38 @@ def test_fetch_sold_prices_falls_back_to_cache_when_fetch_fails(tmp_path, monkey
     assert calls, "the fetch was attempted"
 
 
+def test_fetch_sold_prices_survives_cache_write_failure(tmp_path, monkeypatch):
+    """A cache-write error (disk full/permissions) must not crash the fetch:
+    the cache is an optimization, today's freshly fetched evidence is the point.
+    The loader already tolerates a corrupt cache; the writer now matches."""
+    cache_file = tmp_path / "sold_cache.json"
+    monkeypatch.setattr(watch, "SOLD_CACHE_FILE", cache_file)
+
+    class FakeResp:
+        text = (
+            "A,B,C,D,E,F,G,H,I,J,K,L\n"
+            "0,150000,2026-06-01,WF15 8AN,T,F,,,12,FIRTHCLIFFE ROAD,,LIVERSEDGE,\n"
+        )
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def get(self, *a, **k):
+            return FakeResp()
+
+    def boom(cache):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(watch, "SESSION", FakeSession())
+    monkeypatch.setattr(watch, "_save_sold_cache", boom)
+
+    result = watch.fetch_sold_prices("WF15")
+
+    assert len(result) == 1
+    assert result[0]["price"] == 150000
+
+
 def test_negotiation_insufficient_data():
     listing = make_listing(price=150000)
     assert watch.calculate_negotiation(listing, [])["range_text"] == "Insufficient data"
@@ -297,6 +329,20 @@ def test_confidence_zero_evidence_is_zero():
     listing = make_listing(price=160000, sqft=None, first_seen=None)
     score, breakdown = watch.calculate_confidence(listing, [], [listing])
     assert breakdown["_based_on"] == 0
+    assert score == 0
+
+
+def test_confidence_malformed_first_seen_is_excluded_not_fatal():
+    """A legacy/hand-edited state row with an unparseable first_seen must not
+    kill the run: the listing-age factor is excluded with the standard 'age
+    unknown' note, matching the guards on the same field in _record_sold and
+    _off_market_html. A crash here would take down the whole run with no
+    failed_runs bookkeeping (silent, un-watchdogged death)."""
+    listing = make_listing(first_seen="not-a-date")
+    score, breakdown = watch.calculate_confidence(listing, [], [listing])
+    assert breakdown["listing_age"]["score"] is None
+    assert breakdown["listing_age"]["detail"] == "Listing age unknown"
+    assert breakdown["_based_on"] == 0  # no other evidence, no fake age either
     assert score == 0
 
 

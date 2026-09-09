@@ -299,7 +299,11 @@ def fetch_sold_prices(postcode_area):
         "fetched": datetime.now().isoformat(),
         "data": results,
     }
-    _save_sold_cache(cache)
+    try:
+        _save_sold_cache(cache)
+    except OSError as e:
+        # The cache is an optimization; a failed write must not lose this run's evidence.
+        log(f"WARNING: could not save sold-price cache ({e})")
 
     return results
 
@@ -785,8 +789,12 @@ def calculate_confidence(listing, sold_prices, all_listings, comps=None, epc_map
     first_seen = listing.get("first_seen")
     has_age = first_seen is not None
     if has_age:
-        days_listed = (datetime.now() - datetime.fromisoformat(first_seen)).days
+        try:
+            days_listed = (datetime.now() - datetime.fromisoformat(first_seen)).days
+        except (ValueError, TypeError):
+            has_age = False
 
+    if has_age:
         if has_drop:
             # With price drop: longer = more motivated
             factor4 = _smooth_score(days_listed, [
@@ -1225,7 +1233,11 @@ def fetch_epc_bedrooms(district, config):
         log(f"EPC: no bedroom data parsed for {district} — falling back to keyless tiers")
         return None
     cache[key] = {"fetched": datetime.now().isoformat(), "map": result}
-    _save_epc_cache(cache)
+    try:
+        _save_epc_cache(cache)
+    except OSError as e:
+        # The cache is an optimization; a failed write must not lose this run's data.
+        log(f"WARNING: could not save EPC cache ({e})")
     return result
 
 

@@ -458,6 +458,40 @@ def test_epc_cache_survives_json_roundtrip(tmp_path, monkeypatch):
     assert watch._epc_lookup_floor_area(sale, m2) == 70.0
 
 
+def test_epc_cache_write_failure_does_not_crash_fetch(tmp_path, monkeypatch):
+    """A cache-write error (disk full/permissions) must not kill the run:
+    the cache is an optimization, this run's freshly fetched data is the point.
+    The persisted-cache read side already tolerates corruption; the write side
+    now matches (a crash here hits _run_cycle unwrapped, before save_state)."""
+
+    class FakeResp:
+        text = (
+            "POSTCODE,ADDRESS1,ADDRESS2,TOTAL_FLOOR_AREA,BEDROOMS\n"
+            "WF15 8AN,12,FIRTHCLIFFE ROAD,70.0,3\n"
+        )
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def get(self, *a, **k):
+            return FakeResp()
+
+    def boom(cache):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(watch, "SESSION", FakeSession())
+    monkeypatch.setattr(watch, "_save_epc_cache", boom)
+    monkeypatch.setattr(watch, "EPC_CACHE_FILE", tmp_path / "epc_cache.json")
+    config = {"epc": {"email": "e@example.com", "api_key": "k"}}
+
+    m = watch.fetch_epc_bedrooms("WF15", config)
+
+    assert m is not None
+    sale = {"postcode": "WF15 8AN", "street": "Firthcliffe Road", "paon": "12"}
+    assert watch._epc_lookup_bedrooms(sale, m) == 3
+
+
 def test_factor2_uses_real_epc_sizes_when_coverage_sufficient():
     sales = [
         make_sale(150000, recent_date(10), paon="12"),
