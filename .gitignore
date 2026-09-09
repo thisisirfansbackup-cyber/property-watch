@@ -14,6 +14,7 @@ wheels/
 config.local.json
 sold_cache.json
 epc_cache.json
+detail_cache.json
 web_additions.json
 alerts.log
 alerts.log.*

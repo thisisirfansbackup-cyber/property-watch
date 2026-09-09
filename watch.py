@@ -55,6 +55,19 @@ COMP_LIMIT = 5                     # comparables shown per property
 EPC_CACHE_DAYS = 30                # EPC bedroom data refetched monthly (when a key is configured)
 EPC_CACHE_FILE = SCRIPT_DIR / "epc_cache.json"
 
+# Detail-page cache (sqft/beds/type scraped from listing detail pages).
+DETAIL_CACHE_FILE = SCRIPT_DIR / "detail_cache.json"
+DETAIL_CACHE_DAYS = 30           # re-scrape a detail page at most monthly
+
+# Market-trend predictor (rule-based, consecutive-run snapshots — not ML).
+TREND_WINDOW_RUNS = 3            # runs of market_history consulted per prediction
+TREND_HOT_THRESHOLD = 5.0        # avg change_% over the window counts as heating
+TREND_COOL_THRESHOLD = -5.0      # ... and this as cooling
+MARKET_HISTORY_MAX = 12          # snapshots retained per area|type key
+
+# Outcome-driven weight tuning (heuristic nudge, not ML training).
+WEIGHT_TUNE_CAP = 0.20           # no factor weight moves more than ±20% from base
+
 # Evidence-grade tunables (rating-trust redesign, .scratch/rating-trust)
 GRADE_WEIGHTS = {"HIGH": 1.0, "MEDIUM": 0.75, "LOW": 0.5}
 # Maximum % under asking the negotiation guide may suggest, by grade.
@@ -110,6 +123,42 @@ def load_config():
         except Exception as e:
             log(f"WARNING: could not load config.local.json: {e}")
     return config
+
+
+def validate_config(config):
+    """Check committed/overlay config before the pipeline runs.
+
+    Returns a list of problem strings (empty = valid). Callers decide
+    whether to abort: missing secrets are warnings (email/telegram just
+    skip), malformed filters fail the run.
+    """
+    problems = []
+    filters = config.get("filters")
+    if not isinstance(filters, dict):
+        return ["filters: missing or not an object"]
+    for key in ("bedrooms", "min_price", "max_price", "property_types"):
+        if key not in filters:
+            problems.append(f"filters.{key}: missing")
+    beds = filters.get("bedrooms")
+    if beds is not None and (not isinstance(beds, int) or beds <= 0):
+        problems.append(f"filters.bedrooms: expected positive int, got {beds!r}")
+    lo, hi = filters.get("min_price"), filters.get("max_price")
+    for key, val in (("min_price", lo), ("max_price", hi)):
+        if val is not None and (not isinstance(val, (int, float)) or val <= 0):
+            problems.append(f"filters.{key}: expected positive number, got {val!r}")
+    if (isinstance(lo, (int, float)) and isinstance(hi, (int, float))
+            and lo > hi):
+        problems.append(f"filters: min_price ({lo}) > max_price ({hi})")
+    ptypes = filters.get("property_types")
+    if ptypes is not None and (
+        not isinstance(ptypes, list) or not ptypes
+        or not all(isinstance(t, str) and t for t in ptypes)
+    ):
+        problems.append("filters.property_types: expected non-empty list of strings")
+    search = config.get("search", {})
+    if not isinstance(search, dict) or not search.get("centre"):
+        problems.append("search.centre: missing")
+    return problems
 
 
 def get_secret(config, env_name, cfg_path):
@@ -215,6 +264,29 @@ def _save_sold_cache(cache):
         json.dump(cache, f)
 
 
+# ---------------------------------------------------------------------------
+# Mockable HTTP layer.
+#
+# All live calls (Land Registry CSV, EPC JSON, listing detail pages, status
+# polls) go through ``http_get`` so tests can monkeypatch ONE symbol
+# (``watch.http_get``) instead of performing network I/O. Scoring logic
+# itself never touches the network; this seam is what lets the regression
+# suite replay recorded API responses (tests/fixtures/*).
+# ---------------------------------------------------------------------------
+def http_get(url, params=None, timeout=30, headers=None):
+    """Single mockable GET used by every live fetcher. Returns the response.
+
+    Delegates to the shared ``SESSION`` so existing SESSION-level stubs
+    keep working; new code/tests may stub ``watch.http_get`` directly.
+    """
+    kwargs = {}
+    if params is not None:
+        kwargs["params"] = params
+    if headers is not None:
+        kwargs["headers"] = headers
+    return SESSION.get(url, timeout=timeout, **kwargs)
+
+
 def fetch_sold_prices(postcode_area):
     """Fetch recent sold prices from Land Registry for a postcode area."""
     cache = _load_sold_cache()
@@ -242,7 +314,7 @@ def fetch_sold_prices(postcode_area):
 
     log(f"Fetching Land Registry sold prices for {postcode_area}...")
     try:
-        r = SESSION.get(url, params=params, timeout=45)
+        r = http_get(url, params=params, timeout=45)
         r.raise_for_status()
     except Exception as e:
         log(f"Land Registry fetch failed: {e}")
@@ -381,6 +453,50 @@ def _weighted_mean(sold_prices, prop_type=None):
         total_weight += w
 
     return total_value / total_weight if total_weight > 0 else 0
+
+
+# ---------------------------------------------------------------------------
+# Market-trend predictor (rule-based; consecutive run snapshots — not ML)
+# ---------------------------------------------------------------------------
+
+def record_market_snapshot(state, market_temps):
+    """Append this run's area|type medians to state['market_history'] (bounded)."""
+    history = state.setdefault("market_history", {})
+    now = datetime.now().isoformat()
+    for key, temp in (market_temps or {}).items():
+        if not isinstance(temp, dict) or not temp.get("median"):
+            continue
+        snaps = history.setdefault(key, [])
+        snaps.append({"date": now, "median": temp["median"]})
+        del snaps[:-MARKET_HISTORY_MAX]
+
+
+def predict_market_trend(state, key, window_runs=TREND_WINDOW_RUNS):
+    """Classify an area|type key as heating / cooling / stable / unknown.
+
+    Pure function of consecutive ``market_history`` snapshots: takes the
+    mean of run-over-run % changes over the last ``window_runs`` snapshots
+    and compares against TREND_HOT/COOL thresholds. Returns
+    {"trend", "avg_change_pct", "runs"}.
+    """
+    snaps = (state.get("market_history", {}) or {}).get(key, [])
+    if len(snaps) < 2:
+        return {"trend": "unknown", "avg_change_pct": 0.0, "runs": len(snaps)}
+    tail = snaps[-(window_runs + 1):] if window_runs else snaps[-2:]
+    changes = []
+    for prev, cur in zip(tail, tail[1:]):
+        if prev.get("median"):
+            changes.append((cur["median"] - prev["median"]) / prev["median"] * 100)
+    if not changes:
+        return {"trend": "unknown", "avg_change_pct": 0.0, "runs": len(snaps)}
+    avg = sum(changes) / len(changes)
+    if avg >= TREND_HOT_THRESHOLD:
+        trend = "heating"
+    elif avg <= TREND_COOL_THRESHOLD:
+        trend = "cooling"
+    else:
+        trend = "stable"
+    return {"trend": trend, "avg_change_pct": round(avg, 2), "runs": len(snaps)}
 
 
 # ---------------------------------------------------------------------------
@@ -627,7 +743,8 @@ def _smooth_score(ratio, breakpoints):
     return breakpoints[-1][1]
 
 
-def calculate_confidence(listing, sold_prices, all_listings, comps=None, epc_map=None, caps=None):
+def calculate_confidence(listing, sold_prices, all_listings, comps=None, epc_map=None,
+                         caps=None, base_weights=None):
     """Calculate a deal-quality score (0-100) from real evidence only.
 
     Factors:
@@ -654,12 +771,13 @@ def calculate_confidence(listing, sold_prices, all_listings, comps=None, epc_map
     sqft = listing.get("sqft")
     has_sqft = sqft and sqft > 0
 
-    # Base weights
-    w1 = 0.30   # sold comps
-    w2 = 0.25   # sqft value
-    w3 = 0.15   # price drop
-    w4 = 0.10   # listing age (smart)
-    w5 = 0.20   # market context
+    # Base weights (overridable via tuned_weights() outcome feedback).
+    _base = base_weights or {}
+    w1 = _base.get("price_vs_area", 0.30)   # sold comps
+    w2 = _base.get("sqft_value", 0.25)   # sqft value
+    w3 = _base.get("price_drop", 0.15)   # price drop
+    w4 = _base.get("listing_age", 0.10)   # listing age (smart)
+    w5 = _base.get("market_context", 0.20)   # market context
 
     if not has_sqft:
         w2 = 0.0
@@ -1033,6 +1151,82 @@ def find_comparables(listing, sold_prices, epc_map=None):
     return winner
 
 
+def get_evidence_bundle(listing, sold_prices, epc_map=None):
+    """Structured evidence bundle for downstream AI/decision tools.
+
+    Thin, documented wrapper around ``find_comparables`` returning a
+    stable {tier, grade, median, count, label} dict (or a zeroed
+    UNSCORED bundle when there is no evidence) so consumers never have
+    to know the ladder internals or None-check the winner.
+    """
+    comps = find_comparables(listing, sold_prices, epc_map)
+    if comps is None:
+        return {
+            "tier": None, "grade": "UNSCORED", "median": 0,
+            "count": 0, "label": "no comparables",
+        }
+    return {
+        "tier": comps.get("tier"), "grade": comps.get("grade"),
+        "median": comps.get("median"), "count": comps.get("count"),
+        "label": comps.get("label"),
+    }
+
+
+def tuned_weights(state, base_weights):
+    """Nudge confidence weights from recorded real-world outcomes.
+
+    For each outcome with a stored ``predicted`` deal-quality score:
+    sold-above-asking after a low score (or a lost-bid) means the price
+    evidence was too pessimistic -> shift weight from listing-age toward
+    the evidence factors; the reverse shifts it back. Bounded by
+    WEIGHT_TUNE_CAP. Pure arithmetic over state — no model, no training.
+    """
+    weights = dict(base_weights)
+    outcomes = state.get("outcomes", {}) or {}
+    if not outcomes:
+        return weights
+    nudge = 0
+    for entries in outcomes.values():
+        for o in entries if isinstance(entries, list) else []:
+            if not isinstance(o, dict):
+                continue
+            predicted = o.get("predicted")
+            if predicted is None:
+                continue
+            try:
+                predicted = float(predicted)
+            except (TypeError, ValueError):
+                continue
+            status = o.get("status")
+            cleared_above = o.get("cleared_above_asking")
+            if status in ("sold", "stc") and (cleared_above or predicted < 50):
+                nudge -= 1   # evidence under-called demand
+            elif status == "lost-bid":
+                nudge -= 1
+            elif status == "withdrawn" and predicted > 60:
+                nudge += 1   # evidence over-called the deal
+    if not nudge:
+        return weights
+    step = min(abs(nudge) * 0.05, WEIGHT_TUNE_CAP)
+    # nudge < 0: evidence under-called demand -> move weight from
+    # listing_age to the evidence pair. nudge > 0: the reverse.
+    age = weights.get("listing_age", 0)
+    if nudge < 0:
+        move = min(step, age)
+        weights["listing_age"] = round(age - move, 4)
+        for key in ("price_vs_area", "sqft_value"):
+            weights[key] = round(weights.get(key, 0) + move / 2, 4)
+    else:
+        weights["listing_age"] = round(age + step, 4)
+        for key in ("price_vs_area", "sqft_value"):
+            weights[key] = round(max(0.0, weights.get(key, 0) - step / 2), 4)
+    total = sum(weights.values())
+    if total:
+        for key in weights:
+            weights[key] = round(weights[key] / total, 4)
+    return weights
+
+
 def _type_key(listing):
     """Map a free-text listing type onto a Land Registry type category.
 
@@ -1189,7 +1383,7 @@ def fetch_epc_bedrooms(district, config):
     log(f"Fetching EPC bedroom data for {district}...")
     try:
         token = base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
-        r = SESSION.get(
+        r = http_get(
             "https://epc.opendatacommunities.org/api/v1/domestic/search",
             params={"outcode": key},
             headers={"Accept": "text/csv", "Authorization": f"Basic {token}"},
@@ -1260,7 +1454,7 @@ def fetch_ontemarket(config):
     }
 
     log(f"Fetching OTM: {url} {params}")
-    r = SESSION.get(url, params=params, timeout=20)
+    r = http_get(url, params=params, timeout=20)
     r.raise_for_status()
 
     listings = []
@@ -1338,7 +1532,7 @@ def fetch_barkers(config):
 
         log(f"Fetching Barkers page (start={start})")
         try:
-            r = SESSION.get(url, params=params, timeout=20)
+            r = http_get(url, params=params, timeout=20)
             r.raise_for_status()
         except Exception as e:
             log(f"Barkers fetch error: {e}")
@@ -1461,26 +1655,73 @@ def filter_listings(listings, config):
     return filtered
 
 
+def _load_detail_cache():
+    if DETAIL_CACHE_FILE.exists():
+        try:
+            with open(DETAIL_CACHE_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_detail_cache(cache):
+    with open(DETAIL_CACHE_FILE, "w") as f:
+        json.dump(cache, f)
+
+
+def _parse_detail_page(text):
+    """Extract {sqft, sqm} from a listing detail page body, or {}."""
+    out = {}
+    sqft_match = re.search(r'"minimumAreaSqFt":(\d+)', text or "")
+    if sqft_match:
+        out["sqft"] = int(sqft_match.group(1))
+    sqm_match = re.search(r'"minimumAreaSqM":(\d+)', text or "")
+    if sqm_match:
+        out["sqm"] = int(sqm_match.group(1))
+    return out
+
+
 def enrich_with_sqft(listings):
-    """Fetch sq ft from OTM detail pages for each listing."""
+    """Fetch sq ft from OTM detail pages for each listing (month-cached)."""
+    cache = _load_detail_cache()
+    now = datetime.now()
     for listing in listings:
+        if listing.get("sqft") and listing.get("sqm"):
+            continue
         if listing["source"] != "OnTheMarket":
             continue
         pid = listing["id"].replace("otm-", "")
+        cached = cache.get(listing["id"])
+        if isinstance(cached, dict) and cached.get("fetched"):
+            try:
+                if (now - datetime.fromisoformat(cached["fetched"])).days < DETAIL_CACHE_DAYS:
+                    if cached.get("sqft") and not listing.get("sqft"):
+                        listing["sqft"] = cached["sqft"]
+                    if cached.get("sqm") and not listing.get("sqm"):
+                        listing["sqm"] = cached["sqm"]
+                    continue
+            except (ValueError, TypeError):
+                pass
         try:
-            r = SESSION.get(
+            r = http_get(
                 f"https://www.onthemarket.com/details/{pid}/", timeout=15
             )
             if r.status_code == 200:
-                sqft_match = re.search(r'"minimumAreaSqFt":(\d+)', r.text)
-                if sqft_match:
-                    listing["sqft"] = int(sqft_match.group(1))
-                sqm_match = re.search(r'"minimumAreaSqM":(\d+)', r.text)
-                if sqm_match:
-                    listing["sqm"] = int(sqm_match.group(1))
+                parsed = _parse_detail_page(r.text)
+                entry = {"fetched": now.isoformat(), **parsed}
+                cache[listing["id"]] = entry
+                if parsed.get("sqft") and not listing.get("sqft"):
+                    listing["sqft"] = parsed["sqft"]
+                if parsed.get("sqm") and not listing.get("sqm"):
+                    listing["sqm"] = parsed["sqm"]
         except Exception as e:
             log(f"  sqft fetch failed for {pid}: {e}")
 
+    try:
+        _save_detail_cache(cache)
+    except OSError as e:
+        log(f"WARNING: could not save detail cache ({e})")
     log(f"Enriched {sum(1 for l in listings if l.get('sqft'))} listings with sq ft")
     return listings
 
@@ -1550,7 +1791,7 @@ def detect_listing_status(listing):
     if not url:
         return None
     try:
-        r = SESSION.get(url, timeout=20)
+        r = http_get(url, timeout=20)
     except Exception as e:
         log(f"  status check failed for {listing.get('id')}: {e}")
         return "error"
@@ -2453,7 +2694,8 @@ def _verdict_category(score):
 
 
 def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings,
-                    epc_map=None, market_temps=None, caps=None, sold_meta=None):
+                    epc_map=None, market_temps=None, caps=None, sold_meta=None,
+                    weights=None):
     """Attach scoring inputs/results: first_seen, comparables, score, estimate.
 
     ``sold_meta`` maps postcode area -> {"fetched": iso} when available, so
@@ -2496,7 +2738,8 @@ def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings,
         if area_used and area_used in (sold_meta or {}) else None,
     }
 
-    conf_score, conf_breakdown = calculate_confidence(listing, sold, all_listings, comps, epc_map, caps)
+    conf_score, conf_breakdown = calculate_confidence(
+        listing, sold, all_listings, comps, epc_map, caps, weights)
     listing["comparables"] = comps["comps"] if comps else []
     listing["confidence"] = {"score": conf_score, "breakdown": conf_breakdown}
 
@@ -2678,6 +2921,12 @@ def _run_cycle():
     global _seen_before
     log("=== Run started ===")
     config = load_config()
+    problems = validate_config(config)
+    if problems:
+        for p in problems:
+            log(f"CONFIG ERROR: {p}")
+        log("Aborting run: fix config.json and re-run.")
+        return "degraded", {"new": 0, "drops": 0, "total": 0, "config_errors": problems}
     state = load_state()
 
     _seen_before = set(state.get("seen", {}).keys())
@@ -2774,6 +3023,17 @@ def _run_cycle():
     if _epc_settings(config) and postcode_areas and all(a not in epc_maps for a in postcode_areas):
         evidence_failures.append("EPC data missing for all areas (configured but not populating)")
 
+    # Outcome-driven tuning: nudge the evidence/age balance from recorded
+    # sold/lost-bid outcomes before scoring this run's listings.
+    base_weights = {
+        "price_vs_area": 0.3, "sqft_value": 0.2, "price_drop": 0.15,
+        "listing_age": 0.15, "market_context": 0.2,
+    }
+    try:
+        run_weights = tuned_weights(state, base_weights)
+    except Exception:
+        run_weights = base_weights
+
     # Sold-cache meta (fetch dates) so the persisted evidence basis records
     # which cache each score relied on (rating-trust, issue 04).
     sold_meta = {}
@@ -2802,10 +3062,16 @@ def _run_cycle():
         area = extract_postcode_area(listing["address"]) or next(iter(postcode_areas))
         _attach_derived(
             listing, all_sold, postcode_areas, state, filtered,
-            epc_maps.get(area), market_temps, caps, sold_meta,
+            epc_maps.get(area), market_temps, caps, sold_meta, run_weights,
         )
 
     filtered.sort(key=lambda l: l["confidence"]["score"], reverse=True)
+
+    # Consecutive-run trend snapshots (rule-based predictor input).
+    try:
+        record_market_snapshot(state, market_temps)
+    except Exception as e:
+        log(f"MARKET-HISTORY ERROR: {e}")
 
     # --- Sold / STC detection (rating-trust, issue 06) ---
     sold_rows = []
@@ -2887,15 +3153,22 @@ def parse_args(argv=None):
     )
     parser.add_argument("--days", type=int, help="listing age in days at outcome")
     parser.add_argument("--note", help="free-text note for the outcome")
+    parser.add_argument("--predicted", type=float, default=None,
+                        help="deal-quality score shown before the outcome (weight-tuning input)")
+    parser.add_argument("--cleared-above-asking", dest="cleared_above_asking",
+                        action="store_true",
+                        help="the house cleared above asking (weight-tuning input)")
     return parser.parse_args(argv)
 
 
-def record_outcome(listing_id, status, days=None, note=None):
+def record_outcome(listing_id, status, days=None, note=None, predicted=None,
+                   cleared_above_asking=None):
     """Record a user-reported outcome in state.json (rating-trust, issue 07).
 
     ``sold``/``stc`` transition the listing from ``seen`` into ``sold``; every
     status appends to the top-level ``outcomes`` map. Unknown listing ids
-    raise ValueError.
+    raise ValueError. ``predicted`` (the deal-quality score shown) and
+    ``cleared_above_asking`` feed tuned_weights() calibration.
     """
     state = load_state()
     known = (
@@ -2908,12 +3181,18 @@ def record_outcome(listing_id, status, days=None, note=None):
     seen = state.setdefault("seen", {})
     outcomes = state.setdefault("outcomes", {})
     now_iso = datetime.now().isoformat()
+    if predicted is None:
+        entry = seen.get(listing_id, {}) or {}
+        conf = entry.get("confidence") or {}
+        predicted = conf.get("score")
     outcomes.setdefault(listing_id, []).append({
         "date": now_iso,
         "status": status,
         "days": days,
         "note": note,
         "source": "user",
+        "predicted": predicted,
+        "cleared_above_asking": cleared_above_asking,
     })
     if status in ("sold", "stc") and listing_id in seen:
         entry = seen.pop(listing_id)
@@ -2940,7 +3219,9 @@ def main(argv=None):
             log("ERROR: --outcome requires --status (sold|stc|lost-bid|withdrawn)")
             return 2
         try:
-            record_outcome(args.outcome, args.status, days=args.days, note=args.note)
+            record_outcome(args.outcome, args.status, days=args.days, note=args.note,
+                           predicted=args.predicted,
+                           cleared_above_asking=args.cleared_above_asking or None)
         except ValueError as e:
             log(f"ERROR: {e}")
             return 2

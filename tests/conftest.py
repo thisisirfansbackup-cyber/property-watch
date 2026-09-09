@@ -79,6 +79,8 @@ def sandbox(tmp_path, monkeypatch):
         "LOG_FILE",
         "HTML_FILE",
         "SOLD_CACHE_FILE",
+        "EPC_CACHE_FILE",
+        "DETAIL_CACHE_FILE",
         "LOCAL_CONFIG_FILE",
     ):
         monkeypatch.setattr(watch, name, tmp_path / f"{name.lower()}.tmp")
