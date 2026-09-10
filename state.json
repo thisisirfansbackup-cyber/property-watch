@@ -6,7 +6,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249490",
-      "last_seen": "2026-09-10T12:00:35.783238",
+      "last_seen": "2026-09-10T16:35:16.743838",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -16,12 +16,12 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": null,
-        "label": "no comparables",
-        "count": 0,
-        "grade": "UNSCORED",
+        "tier": 3,
+        "label": "same type, WF13 district",
+        "count": 181,
+        "grade": "LOW",
         "area": "WF13",
-        "cache_fetched": null
+        "cache_fetched": "2026-09-10T16:35:12.707776"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -33,7 +33,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-10T12:00:35.783238",
+      "last_seen": "2026-09-10T16:35:16.743838",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -43,15 +43,18 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": null,
-        "label": "no comparables",
-        "count": 0,
-        "grade": "UNSCORED",
+        "tier": 3,
+        "label": "same type, WF15 district",
+        "count": 171,
+        "grade": "LOW",
         "area": "WF15",
-        "cache_fetched": null
+        "cache_fetched": "2026-09-10T16:35:16.715345"
       },
       "verdict_category": "fair",
-      "pending_verdict": null,
+      "pending_verdict": {
+        "category": "over",
+        "since": "2026-09-10T16:35:16.743734"
+      },
       "verdict_revised": true
     },
     "otm-18683740": {
@@ -60,7 +63,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-10T12:00:35.783238",
+      "last_seen": "2026-09-10T16:35:16.743838",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -70,12 +73,12 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": null,
-        "label": "no comparables",
-        "count": 0,
-        "grade": "UNSCORED",
+        "tier": 3,
+        "label": "same type, WF13 district",
+        "count": 181,
+        "grade": "LOW",
         "area": "WF13",
-        "cache_fetched": null
+        "cache_fetched": "2026-09-10T16:35:12.707776"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -87,7 +90,7 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-10T12:00:35.783238",
+      "last_seen": "2026-09-10T16:35:16.743838",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -97,15 +100,18 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": null,
-        "label": "no comparables",
-        "count": 0,
-        "grade": "UNSCORED",
-        "area": "",
-        "cache_fetched": null
+        "tier": 3,
+        "label": "same type, local area",
+        "count": 181,
+        "grade": "LOW",
+        "area": "WF13",
+        "cache_fetched": "2026-09-10T16:35:12.707776"
       },
       "verdict_category": "fair",
-      "pending_verdict": null,
+      "pending_verdict": {
+        "category": "over",
+        "since": "2026-09-10T16:35:16.742093"
+      },
       "verdict_revised": true
     },
     "otm-20257799": {
@@ -114,7 +120,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-03T11:45:07.412655",
-      "last_seen": "2026-09-10T12:00:35.783238",
+      "last_seen": "2026-09-10T16:35:16.743838",
       "price_history": [
         {
           "date": "2026-09-03T11:45:07.412655",
@@ -124,12 +130,12 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": null,
-        "label": "no comparables",
-        "count": 0,
-        "grade": "UNSCORED",
+        "tier": 1,
+        "label": "same type, your street",
+        "count": 5,
+        "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": null
+        "cache_fetched": "2026-09-10T16:35:16.715345"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -141,7 +147,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-09-10T12:00:35.783238",
+      "last_seen": "2026-09-10T16:35:16.743838",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -151,19 +157,19 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": null,
-        "label": "no comparables",
-        "count": 0,
-        "grade": "UNSCORED",
-        "area": "",
-        "cache_fetched": null
+        "tier": 3,
+        "label": "same type, local area",
+        "count": 103,
+        "grade": "LOW",
+        "area": "WF13",
+        "cache_fetched": "2026-09-10T16:35:12.707776"
       },
       "verdict_category": "bad",
       "pending_verdict": null,
       "verdict_revised": true
     }
   },
-  "last_run": "2026-09-10T12:00:35.783408",
+  "last_run": "2026-09-10T16:35:16.743928",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -241,14 +247,6 @@
     }
   },
   "run_history": [
-    {
-      "ts": "2026-09-06T19:22:07.150634",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 7
-    },
     {
       "ts": "2026-09-06T21:31:06.967367",
       "sources": {
@@ -352,10 +350,18 @@
         "barkers": 120
       },
       "filtered": 6
+    },
+    {
+      "ts": "2026-09-10T16:35:16.743885",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 6
     }
   ],
-  "failed_runs": 1,
-  "last_successful_run": "2026-09-09T22:10:33.654098",
+  "failed_runs": 0,
+  "last_successful_run": "2026-09-10T16:35:16.743885",
   "sold": {
     "rm-91657857": {
       "address": "Leyland Road, Batley, WF17",
