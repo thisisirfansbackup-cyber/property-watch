@@ -102,6 +102,47 @@ def test_off_market_list_bounded():
     watch._update_state(state, [], {})
     watch._update_state(state, [], {})
     assert len(state["off_market"]) <= 30
+def test_estimate_and_basis_persisted_on_seen(tmp_path, monkeypatch):
+    """The clearing estimate must be persisted each run (estimate-rank D7).
+
+    This is what makes the calibration loop real: outcome rows can later
+    record ``estimate_at_decision`` and compare predicted vs actual, instead
+    of the never-populated ``predicted: null`` of the pre-estimate era.
+    """
+    listing = make_listing()
+    listing["evidence_basis"] = {
+        "tier": 2, "label": "same type, sector WF15 8", "count": 9,
+        "grade": "MEDIUM", "area": "WF15", "cache_fetched": None,
+    }
+    listing["verdict"] = {"category": "fair", "pending": None, "revised": False}
+    listing["estimate"] = {
+        "mid": 155000, "low": 152000, "high": 158000,
+        "grade": "MEDIUM", "vs_asking": -2.5, "text": "Estimate ...",
+    }
+
+    state = {}
+    watch._update_state(state, [listing], {})
+
+    seen = state["seen"]["test-1"]
+    assert seen["estimate_mid"] == 155000
+    assert seen["estimate"] == {
+        "mid": 155000, "low": 152000, "high": 158000,
+        "grade": "MEDIUM", "vs_asking": -2.5,
+    }
+    # The HTML text is not persisted — only the JSON-safe numeric subset.
+    assert "text" not in seen["estimate"]
+    assert seen["evidence_basis"]["tier"] == 2
+    assert seen["verdict_category"] == "fair"
+
+
+def test_listing_without_estimate_keeps_no_stale_fields():
+    """A listing that never scored (no estimate key) must not fabricate one."""
+    state = {}
+    watch._update_state(state, [make_listing()], {})
+    assert "estimate" not in state["seen"]["test-1"]
+    assert "estimate_mid" not in state["seen"]["test-1"]
+
+
 def test_save_state_is_atomic_and_backs_up_previous(tmp_path, monkeypatch):
     """save_state must never leave a torn state.json, and .bak keeps the prior state."""
     state_file = tmp_path / "state.json"

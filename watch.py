@@ -2828,6 +2828,20 @@ def _update_state(state, filtered, source_counts):
             seen[lid]["pending_verdict"] = verdict.get("pending")
             seen[lid]["verdict_revised"] = verdict.get("revised")
 
+        # Estimate-rank: persist the clearing estimate every run so outcome
+        # rows can record ``estimate_at_decision`` and calibration can compare
+        # predicted vs actual (rating-trust D7 / estimate-rank D7 fast signal).
+        estimate = listing.get("estimate")
+        if isinstance(estimate, dict):
+            seen[lid]["estimate"] = {
+                "mid": estimate.get("mid"),
+                "low": estimate.get("low"),
+                "high": estimate.get("high"),
+                "grade": estimate.get("grade"),
+                "vs_asking": estimate.get("vs_asking"),
+            }
+            seen[lid]["estimate_mid"] = estimate.get("mid")
+
     # Promote listings absent for N consecutive runs to off-market
     for lid in list(seen.keys()):
         if lid in current_ids:
