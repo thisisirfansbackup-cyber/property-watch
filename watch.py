@@ -1035,15 +1035,22 @@ def _comparables_grade(tier, count, newest_date_str):
     return "LOW"
 
 
-def find_comparables(listing, sold_prices, epc_map=None):
+def find_comparables(listing, sold_prices, epc_map=None, ring_sold_prices=None):
     """Find honest sold-price comparables using a tiered evidence ladder.
 
     Tiers (the first with >= COMP_MIN_COUNT sales wins):
-      0. 3-bed + same type + same street   (only when EPC bedroom data available)
-      1. same type + same street
-      2. same type + same postcode sector
-      3. same type + whole postcode district
-      4. any house type + whole district   (last resort, labelled as such)
+      1. same type + same street           (merged search-ring pool)
+      2. same type + same postcode sector  (merged search-ring pool)
+      3. same type + whole postcode district (OWN area only)
+      4. any house type + whole district     (own area, last resort)
+
+    ``sold_prices`` is the listing's OWN postcode-area pool — the only pool
+    the district tiers (3/4) may use, so a label saying "WF15 district"
+    always means WF15 numbers (estimate-rank D6). ``ring_sold_prices`` is the
+    merged pool across the search ring and backs the street/sector tiers so
+    boundary streets match their true neighbours; when it is omitted those
+    tiers fall back to ``sold_prices`` and single-pool callers (e.g. tests,
+    get_evidence_bundle without a ring) keep identical behaviour.
 
     Returns {"tier", "label", "median", "count", "comps"} or None when even
     the last-resort tier lacks COMP_MIN_COUNT sales — callers must treat the
@@ -1053,6 +1060,7 @@ def find_comparables(listing, sold_prices, epc_map=None):
     street = _street_of(listing.get("address"))
     district = extract_postcode_area(listing.get("address") or "")
     ptype = _type_key(listing)
+    near_pool = ring_sold_prices if ring_sold_prices is not None else sold_prices
 
     def _take(pool):
         pool = sorted(pool, key=lambda s: s["date"], reverse=True)
@@ -1060,47 +1068,33 @@ def find_comparables(listing, sold_prices, epc_map=None):
 
     tiers = []
 
-    # --- Street-level pools -------------------------------------------------
+    # --- Street-level pools (merged ring pool) ------------------------------
     same_street = [
-        s for s in sold_prices
+        s for s in near_pool
         if _streets_match(street, (s.get("street") or "").strip().lower())
     ]
     same_street_type = (
         [s for s in same_street if s.get("type") == ptype] if ptype else same_street
     )
 
-    # Tier 0: EPC-verified bedroom match on the street
-    if epc_map and listing.get("bedrooms"):
-        beds_pool = [
-            {**s, "beds": listing["bedrooms"]}
-            for s in same_street_type
-            if _epc_lookup_bedrooms(s, epc_map) == listing["bedrooms"]
-        ]
-        if len(beds_pool) >= COMP_MIN_COUNT:
-            pool, median = _take(beds_pool)
-            tiers.append({
-                "tier": 0,
-                "label": f"{listing['bedrooms']}-bed, same type, your street",
-                "count": len(pool),
-                "comps": pool[:COMP_LIMIT],
-                "median": median,
-            })
-
     if len(same_street_type) >= COMP_MIN_COUNT:
         pool, median = _take(same_street_type)
         tiers.append({
             "tier": 1,
-            "label": "same type, your street" if ptype else "your street",
+            "label": (
+                f"same type, your street{_pool_area_span(pool)}"
+                if ptype else f"your street{_pool_area_span(pool)}"
+            ),
             "count": len(pool),
             "comps": pool[:COMP_LIMIT],
             "median": median,
         })
 
-    # --- Sector-level pool --------------------------------------------------
+    # --- Sector-level pool (merged ring pool) ------------------------------
     listing_sector = _listing_sector(listing.get("address"))
     if listing_sector:
         sector_pool = [
-            s for s in sold_prices
+            s for s in near_pool
             if (not ptype or s.get("type") == ptype)
             and _postcode_sector(s.get("postcode")) == listing_sector
         ]
@@ -1117,7 +1111,7 @@ def find_comparables(listing, sold_prices, epc_map=None):
                 "median": median,
             })
 
-    # --- District-level pools ----------------------------------------------
+    # --- District-level pools (OWN area only, never another district) ------
     district_type = (
         [s for s in sold_prices if s.get("type") == ptype] if ptype else list(sold_prices)
     )
@@ -1151,7 +1145,23 @@ def find_comparables(listing, sold_prices, epc_map=None):
     return winner
 
 
-def get_evidence_bundle(listing, sold_prices, epc_map=None):
+def _pool_area_span(pool):
+    """' (across WF15, WF16)' suffix when a comp pool spans districts.
+
+    Lets labels honestly signal that a street/sector tier drew on the merged
+    search-ring pool rather than the listing's own area alone (estimate-rank D6).
+    """
+    areas = sorted({
+        extract_postcode_area(s.get("postcode") or "")
+        for s in pool
+    })
+    areas = [a for a in areas if a]
+    if len(areas) >= 2:
+        return f" (across {', '.join(areas)})"
+    return ""
+
+
+def get_evidence_bundle(listing, sold_prices, epc_map=None, ring_sold_prices=None):
     """Structured evidence bundle for downstream AI/decision tools.
 
     Thin, documented wrapper around ``find_comparables`` returning a
@@ -1159,7 +1169,7 @@ def get_evidence_bundle(listing, sold_prices, epc_map=None):
     UNSCORED bundle when there is no evidence) so consumers never have
     to know the ladder internals or None-check the winner.
     """
-    comps = find_comparables(listing, sold_prices, epc_map)
+    comps = find_comparables(listing, sold_prices, epc_map, ring_sold_prices)
     if comps is None:
         return {
             "tier": None, "grade": "UNSCORED", "median": 0,
@@ -2708,13 +2718,16 @@ def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings,
     """
     area = extract_postcode_area(listing["address"])
     sold = sold_prices.get(area, []) if area else []
+    # estimate-rank D6: never silently borrow another district's pool — if the
+    # listing's own area has no sales, the district tiers having nothing is the
+    # honest answer (street/sector tiers may still score from the ring pool).
     area_used = area
-    if not sold:
-        for a in postcode_areas:
-            if sold_prices.get(a):
-                sold = sold_prices[a]
-                area_used = a
-                break
+
+    # Merged search-ring pool: street/sector tiers search across every scraped
+    # area so boundary streets match their true neighbours (estimate-rank D6).
+    ring_sold = []
+    for a in (postcode_areas if postcode_areas else ([area] if area else [])):
+        ring_sold.extend(sold_prices.get(a, []))
 
     entry = state.get("seen", {}).get(listing["id"], {})
     listing["first_seen"] = entry.get("first_seen") or entry.get("last_seen")
@@ -2725,7 +2738,7 @@ def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings,
     if caps is None:
         caps = NEGOTIATION_CAPS
 
-    comps = find_comparables(listing, sold, epc_map)
+    comps = find_comparables(listing, sold, epc_map, ring_sold)
     grade = (comps or {}).get("grade") or "UNSCORED"
     listing["evidence_grade"] = grade
     listing["evidence_basis"] = {
