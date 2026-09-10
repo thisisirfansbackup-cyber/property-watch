@@ -1091,7 +1091,13 @@ def find_comparables(listing, sold_prices, epc_map=None, ring_sold_prices=None):
         })
 
     # --- Sector-level pool (merged ring pool) ------------------------------
-    listing_sector = _listing_sector(listing.get("address"))
+    # Full postcode from the detail page (D3) beats district-only addresses:
+    listing_sector = None
+    full_pc = (listing.get("postcode") or "").strip().upper()
+    if full_pc:
+        listing_sector = _postcode_sector(full_pc)
+    if not listing_sector:
+        listing_sector = _listing_sector(listing.get("address"))
     if listing_sector:
         sector_pool = [
             s for s in near_pool
@@ -1681,24 +1687,81 @@ def _save_detail_cache(cache):
 
 
 def _parse_detail_page(text):
-    """Extract {sqft, sqm} from a listing detail page body, or {}."""
+    """Extract {sqft, sqm, postcode, tenure, chain, epc_rating} from an OTM
+    listing detail page body, or {} (estimate-rank D3).
+
+    Every field comes from HTML/embedded JSON that is ALREADY fetched for the
+    sqft enrichment — zero additional requests. Postcode is the property's
+    own ``"postcode":"WF13 4BU"`` JSON key (not a nearby/statistical match).
+    """
+    text = text or ""
     out = {}
-    sqft_match = re.search(r'"minimumAreaSqFt":(\d+)', text or "")
+    sqft_match = re.search(r'"minimumAreaSqFt":(\d+)', text)
     if sqft_match:
         out["sqft"] = int(sqft_match.group(1))
-    sqm_match = re.search(r'"minimumAreaSqM":(\d+)', text or "")
+    sqm_match = re.search(r'"minimumAreaSqM":(\d+)', text)
     if sqm_match:
         out["sqm"] = int(sqm_match.group(1))
+    pc_match = re.search(
+        r'"postcode"\s*:\s*"([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2})"', text, re.IGNORECASE
+    )
+    if pc_match:
+        out["postcode"] = pc_match.group(1).upper()
+    # Tenure lives in the key-facts JSON: {"title":"Tenure",...,"value":"Freehold"}
+    tenure_match = re.search(
+        r'"title"\s*:\s*"Tenure".{0,700}?"value"\s*:\s*"([^"]+)"',
+        text, re.IGNORECASE | re.DOTALL,
+    )
+    if tenure_match:
+        out["tenure"] = tenure_match.group(1).title()
+    # Chain-free is a property label: "propertyLabels":["Chain-free"]
+    labels_match = re.search(r'"propertyLabels"\s*:\s*\[([^\]]*)\]', text, re.DOTALL)
+    if labels_match is not None:
+        out["chain"] = "chain" in labels_match.group(1).lower()
+    epc_match = re.search(r'EPC rating:\s*([A-Ga-g])', text)
+    if epc_match:
+        out["epc_rating"] = epc_match.group(1).upper()
     return out
 
 
+def _extract_rightmove_facts(text):
+    """Extract {postcode, tenure} from a Rightmove listing detail page.
+
+    The property's own full postcode appears as the *only* quoted full postcode
+    literal on live pages (verified) — if more than one distinct literal exists
+    the signal is ambiguous and nothing is returned rather than a guess. Tenure
+    sits in the info-reel HTML as a bare ``<p>Freehold</p>``.
+    """
+    flat = (text or "").replace('\\"', '"').replace("\\u0022", '"')
+    pcs = {m.group(1).upper() for m in re.finditer(
+        r'"([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})"', flat)}
+    out = {}
+    if len(pcs) == 1:
+        out["postcode"] = next(iter(pcs))
+    tenure_match = re.search(
+        r'<p[^>]*>\s*(Freehold|Leasehold|Share of Freehold)\s*</p>',
+        text or "", re.IGNORECASE,
+    )
+    if tenure_match:
+        out["tenure"] = tenure_match.group(1).title()
+    return out
+
+
+def _apply_missing(src, dest):
+    """Copy src->dest for the enrichment fields, never overwriting an existing
+    value (a fresh parse must not clobber a config/state-sourced fact)."""
+    for key in ("sqft", "sqm", "postcode", "tenure", "chain", "epc_rating"):
+        if src.get(key) is not None and dest.get(key) is None:
+            dest[key] = src[key]
+
+
 def enrich_with_sqft(listings):
-    """Fetch sq ft from OTM detail pages for each listing (month-cached)."""
+    """Enrich OTM listings from their detail pages (sqft + postcode + tenure +
+    chain + EPC rating), month-cached (estimate-rank D3: all from pages already
+    fetched for sqft — zero additional requests)."""
     cache = _load_detail_cache()
     now = datetime.now()
     for listing in listings:
-        if listing.get("sqft") and listing.get("sqm"):
-            continue
         if listing["source"] != "OnTheMarket":
             continue
         pid = listing["id"].replace("otm-", "")
@@ -1706,10 +1769,10 @@ def enrich_with_sqft(listings):
         if isinstance(cached, dict) and cached.get("fetched"):
             try:
                 if (now - datetime.fromisoformat(cached["fetched"])).days < DETAIL_CACHE_DAYS:
-                    if cached.get("sqft") and not listing.get("sqft"):
-                        listing["sqft"] = cached["sqft"]
-                    if cached.get("sqm") and not listing.get("sqm"):
-                        listing["sqm"] = cached["sqm"]
+                    # Trust the cache within its window — including legacy
+                    # entries that predate postcode extraction. Those backfill
+                    # naturally on the next monthly refresh.
+                    _apply_missing(cached, listing)
                     continue
             except (ValueError, TypeError):
                 pass
@@ -1721,10 +1784,7 @@ def enrich_with_sqft(listings):
                 parsed = _parse_detail_page(r.text)
                 entry = {"fetched": now.isoformat(), **parsed}
                 cache[listing["id"]] = entry
-                if parsed.get("sqft") and not listing.get("sqft"):
-                    listing["sqft"] = parsed["sqft"]
-                if parsed.get("sqm") and not listing.get("sqm"):
-                    listing["sqm"] = parsed["sqm"]
+                _apply_missing(parsed, listing)
         except Exception as e:
             log(f"  sqft fetch failed for {pid}: {e}")
 
@@ -1809,6 +1869,12 @@ def detect_listing_status(listing):
         return "removed"
     if r.status_code != 200:
         return "error"
+    # estimate-rank D3: steal the full postcode/tenure from the page we just
+    # fetched (polled every run for status) — no extra requests. Persisted via
+    # _update_state so the NEXT run's scoring can use sector-tier comps.
+    for key, value in _extract_rightmove_facts(r.text).items():
+        if listing.get(key) is None:
+            listing[key] = value
     return _match_sold_marker(r.text)
 
 
@@ -2734,6 +2800,12 @@ def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings,
     history = entry.get("price_history")
     listing["price_history"] = history if isinstance(history, list) else None
     listing["relisted"] = listing["id"] in state.get("off_market", {})
+    # estimate-rank D3: restore detail-page facts persisted by a previous run
+    # (Rightmove postcodes are parsed during status polls, AFTER scoring, so
+    # they take effect from the next run onward).
+    for key in ("postcode", "tenure", "chain", "epc_rating"):
+        if listing.get(key) is None and entry.get(key) is not None:
+            listing[key] = entry[key]
 
     if caps is None:
         caps = NEGOTIATION_CAPS
@@ -2854,6 +2926,12 @@ def _update_state(state, filtered, source_counts):
                 "vs_asking": estimate.get("vs_asking"),
             }
             seen[lid]["estimate_mid"] = estimate.get("mid")
+
+        # estimate-rank D3: persist detail-page facts so the NEXT run's scoring
+        # can use them (Rightmove polls run after scoring; OTM enriches before).
+        for key in ("postcode", "tenure", "chain", "epc_rating"):
+            if listing.get(key) is not None:
+                seen[lid][key] = listing[key]
 
     # Promote listings absent for N consecutive runs to off-market
     for lid in list(seen.keys()):

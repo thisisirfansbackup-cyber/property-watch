@@ -191,6 +191,89 @@ def test_parse_detail_page_extracts_sqft():
     assert watch._parse_detail_page("<html>no data</html>") == {}
 
 
+# --- estimate-rank D3: postcode/tenure/chain/EPC from fetched detail pages --
+
+def test_parse_detail_page_extracts_d3_facts():
+    """All D3 facts come from OTM page JSON/HTML already fetched for sqft."""
+    html = (
+        '{"minimumAreaSqFt":656,"minimumAreaSqM":61,'
+        '"postcode":"WF13 4BU",'
+        '"title":"Tenure","description":"ownership info","iconId":"gavel","value":"Freehold",'
+        '"propertyLabels":["Chain-free"],"other":"x"}'
+        '<div>EPC rating: C</div>'
+    )
+    parsed = watch._parse_detail_page(html)
+    assert parsed["postcode"] == "WF13 4BU"
+    assert parsed["tenure"] == "Freehold"
+    assert parsed["chain"] is True
+    assert parsed["epc_rating"] == "C"
+    assert parsed["sqft"] == 656
+
+
+def test_parse_detail_page_chain_not_free():
+    html = '{"propertyLabels":["New home","Part exchange"],"postcode":"WF13 4BU"}'
+    assert watch._parse_detail_page(html)["chain"] is False
+
+
+def test_extract_rightmove_facts_single_postcode():
+    """The RM page carries the property's own postcode as the single quoted
+    literal; tenure sits in the info-reel."""
+    html = (
+        '<html>window.JSON = "[\\"WF16 9PN\\",\\"Resale\\",92584293]"</html>'
+        '<dl><span><p class="x">Freehold</p></span></dd></dl>'
+    )
+    facts = watch._extract_rightmove_facts(html)
+    assert facts == {"postcode": "WF16 9PN", "tenure": "Freehold"}
+
+
+def test_extract_rightmove_facts_ambiguous_postcodes_skip():
+    """Two+ distinct postcode literals could be nearby/stats data — never
+    guess, return nothing (the listing keeps district-level evidence)."""
+    html = '<html>["WF16 9PN","WF16 7HE","BD19 3RU"]</html>'
+    facts = watch._extract_rightmove_facts(html)
+    assert "postcode" not in facts
+
+
+def test_extract_rightmove_facts_empty_html():
+    assert watch._extract_rightmove_facts(None) == {}
+    assert watch._extract_rightmove_facts("") == {}
+
+
+def test_enrich_with_sqft_restores_cached_d3_facts(tmp_path, monkeypatch):
+    cache_file = tmp_path / "detail_cache.json"
+    monkeypatch.setattr(watch, "DETAIL_CACHE_FILE", cache_file)
+    cache_file.write_text(json.dumps({
+        "otm-1": {"fetched": datetime.datetime.now().isoformat(),
+                  "sqft": 800, "sqm": 74, "postcode": "WF13 4BU",
+                  "tenure": "Freehold", "chain": True, "epc_rating": "C"},
+    }))
+    calls = []
+    monkeypatch.setattr(
+        watch, "http_get",
+        lambda *a, **k: (calls.append(a), _Resp(""))[1])
+    out = watch.enrich_with_sqft([{"id": "otm-1", "source": "OnTheMarket"}])
+    assert out[0]["postcode"] == "WF13 4BU"
+    assert out[0]["tenure"] == "Freehold"
+    assert out[0]["epc_rating"] == "C"
+    assert calls == []
+
+
+def test_detect_listing_status_captures_rightmove_facts(monkeypatch):
+    """detect_listing_status already polls every RM URL each run — the D3
+    facts are captured for the price of nothing, and persisted next run."""
+    body = (
+        '<html>window.JSON = "[\\"WF16 9PN\\"]"'
+        "<p class=info>Leasehold</p>"
+        "3 bedroom house for sale Hadfield Road</html>"
+    )
+    monkeypatch.setattr(watch, "http_get", lambda *a, **k: _Resp(body, status_code=200))
+    listing = {"id": "rm-1", "url": "https://www.rightmove.co.uk/properties/1"}
+    status = watch.detect_listing_status(listing)
+    assert status is None  # still for sale
+    assert listing["postcode"] == "WF16 9PN"
+    assert listing["tenure"] == "Leasehold"
+
+
 # --- Market-trend predictor ----------------------------------------------
 
 def test_predict_trend_heating():

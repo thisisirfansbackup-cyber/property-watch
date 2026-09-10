@@ -405,6 +405,51 @@ def test_attach_derived_never_borrows_another_district_pool():
     assert listing["evidence_basis"]["label"] == "no comparables"
 
 
+def test_sector_tier_uses_detail_page_postcode():
+    """D3: a listing whose address only has a district yields a sector tier
+    once the detail page contributes its full postcode (WF13 -> WF13 4)."""
+    listing = {
+        "address": "Lyndale Mews, Staincliffe, Dewsbury, WF13",
+        "type": "terraced",
+        "postcode": "WF13 4BU",
+    }
+    own = [make_sale(150000, "2026-06-01", street="LYNDALE MEWS")]  # thin street
+    ring = [
+        *own,
+        make_sale(140000, "2026-04-01", street="OTHER ROAD", postcode="WF13 4BU"),
+        make_sale(145000, "2026-03-01", street="ANOTHER ROAD", postcode="WF13 4BA"),
+        make_sale(148000, "2026-02-01", street="MORE ROAD", postcode="WF13 4BB"),
+    ]
+    comps = watch.find_comparables(listing, own, ring_sold_prices=ring)
+    assert comps["tier"] == 2
+    assert comps["label"] == "same type, sector WF13 4"
+
+
+def test_detail_page_facts_persist_and_restore_via_state():
+    """D3 round-trip: facts parsed during status polls persist onto seen, and
+    _attach_derived restores them for the NEXT run's scoring."""
+    listing = make_listing(id="rm-1")
+    listing["postcode"] = "WF16 9PN"
+    listing["tenure"] = "Freehold"
+    state = {}
+    watch._update_state(state, [listing], {})
+    assert state["seen"]["rm-1"]["postcode"] == "WF16 9PN"
+    assert state["seen"]["rm-1"]["tenure"] == "Freehold"
+
+    # Next run: listing arrives WITHOUT the facts (only address); they must be
+    # restored from state before find_comparables is consulted.
+    restored = make_listing(id="rm-1")
+    assert restored.get("postcode") is None  # arrives without detail-page facts
+    assert restored.get("tenure") is None
+    state2 = {"seen": state["seen"], "off_market": {}}
+    watch._attach_derived(
+        restored, {"WF16": []}, {"WF16"}, state2, [restored],
+        epc_map=None, market_temps=None, caps=None, sold_meta=None, weights=None,
+    )
+    assert restored["postcode"] == "WF16 9PN"
+    assert restored["tenure"] == "Freehold"
+
+
 def test_type_key_maps_listing_type_variants():
     assert watch._type_key({"type": "End Terrace"}) == "terraced"
     assert watch._type_key({"type": "Mid-Terraced House"}) == "terraced"
