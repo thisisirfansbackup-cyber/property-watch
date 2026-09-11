@@ -1035,15 +1035,22 @@ def _comparables_grade(tier, count, newest_date_str):
     return "LOW"
 
 
-def find_comparables(listing, sold_prices, epc_map=None):
+def find_comparables(listing, sold_prices, epc_map=None, ring_sold_prices=None):
     """Find honest sold-price comparables using a tiered evidence ladder.
 
     Tiers (the first with >= COMP_MIN_COUNT sales wins):
-      0. 3-bed + same type + same street   (only when EPC bedroom data available)
-      1. same type + same street
-      2. same type + same postcode sector
-      3. same type + whole postcode district
-      4. any house type + whole district   (last resort, labelled as such)
+      1. same type + same street           (merged search-ring pool)
+      2. same type + same postcode sector  (merged search-ring pool)
+      3. same type + whole postcode district (OWN area only)
+      4. any house type + whole district     (own area, last resort)
+
+    ``sold_prices`` is the listing's OWN postcode-area pool — the only pool
+    the district tiers (3/4) may use, so a label saying "WF15 district"
+    always means WF15 numbers (estimate-rank D6). ``ring_sold_prices`` is the
+    merged pool across the search ring and backs the street/sector tiers so
+    boundary streets match their true neighbours; when it is omitted those
+    tiers fall back to ``sold_prices`` and single-pool callers (e.g. tests,
+    get_evidence_bundle without a ring) keep identical behaviour.
 
     Returns {"tier", "label", "median", "count", "comps"} or None when even
     the last-resort tier lacks COMP_MIN_COUNT sales — callers must treat the
@@ -1053,6 +1060,7 @@ def find_comparables(listing, sold_prices, epc_map=None):
     street = _street_of(listing.get("address"))
     district = extract_postcode_area(listing.get("address") or "")
     ptype = _type_key(listing)
+    near_pool = ring_sold_prices if ring_sold_prices is not None else sold_prices
 
     def _take(pool):
         pool = sorted(pool, key=lambda s: s["date"], reverse=True)
@@ -1060,47 +1068,39 @@ def find_comparables(listing, sold_prices, epc_map=None):
 
     tiers = []
 
-    # --- Street-level pools -------------------------------------------------
+    # --- Street-level pools (merged ring pool) ------------------------------
     same_street = [
-        s for s in sold_prices
+        s for s in near_pool
         if _streets_match(street, (s.get("street") or "").strip().lower())
     ]
     same_street_type = (
         [s for s in same_street if s.get("type") == ptype] if ptype else same_street
     )
 
-    # Tier 0: EPC-verified bedroom match on the street
-    if epc_map and listing.get("bedrooms"):
-        beds_pool = [
-            {**s, "beds": listing["bedrooms"]}
-            for s in same_street_type
-            if _epc_lookup_bedrooms(s, epc_map) == listing["bedrooms"]
-        ]
-        if len(beds_pool) >= COMP_MIN_COUNT:
-            pool, median = _take(beds_pool)
-            tiers.append({
-                "tier": 0,
-                "label": f"{listing['bedrooms']}-bed, same type, your street",
-                "count": len(pool),
-                "comps": pool[:COMP_LIMIT],
-                "median": median,
-            })
-
     if len(same_street_type) >= COMP_MIN_COUNT:
         pool, median = _take(same_street_type)
         tiers.append({
             "tier": 1,
-            "label": "same type, your street" if ptype else "your street",
+            "label": (
+                f"same type, your street{_pool_area_span(pool)}"
+                if ptype else f"your street{_pool_area_span(pool)}"
+            ),
             "count": len(pool),
             "comps": pool[:COMP_LIMIT],
             "median": median,
         })
 
-    # --- Sector-level pool --------------------------------------------------
-    listing_sector = _listing_sector(listing.get("address"))
+    # --- Sector-level pool (merged ring pool) ------------------------------
+    # Full postcode from the detail page (D3) beats district-only addresses:
+    listing_sector = None
+    full_pc = (listing.get("postcode") or "").strip().upper()
+    if full_pc:
+        listing_sector = _postcode_sector(full_pc)
+    if not listing_sector:
+        listing_sector = _listing_sector(listing.get("address"))
     if listing_sector:
         sector_pool = [
-            s for s in sold_prices
+            s for s in near_pool
             if (not ptype or s.get("type") == ptype)
             and _postcode_sector(s.get("postcode")) == listing_sector
         ]
@@ -1117,7 +1117,7 @@ def find_comparables(listing, sold_prices, epc_map=None):
                 "median": median,
             })
 
-    # --- District-level pools ----------------------------------------------
+    # --- District-level pools (OWN area only, never another district) ------
     district_type = (
         [s for s in sold_prices if s.get("type") == ptype] if ptype else list(sold_prices)
     )
@@ -1151,7 +1151,23 @@ def find_comparables(listing, sold_prices, epc_map=None):
     return winner
 
 
-def get_evidence_bundle(listing, sold_prices, epc_map=None):
+def _pool_area_span(pool):
+    """' (across WF15, WF16)' suffix when a comp pool spans districts.
+
+    Lets labels honestly signal that a street/sector tier drew on the merged
+    search-ring pool rather than the listing's own area alone (estimate-rank D6).
+    """
+    areas = sorted({
+        extract_postcode_area(s.get("postcode") or "")
+        for s in pool
+    })
+    areas = [a for a in areas if a]
+    if len(areas) >= 2:
+        return f" (across {', '.join(areas)})"
+    return ""
+
+
+def get_evidence_bundle(listing, sold_prices, epc_map=None, ring_sold_prices=None):
     """Structured evidence bundle for downstream AI/decision tools.
 
     Thin, documented wrapper around ``find_comparables`` returning a
@@ -1159,7 +1175,7 @@ def get_evidence_bundle(listing, sold_prices, epc_map=None):
     UNSCORED bundle when there is no evidence) so consumers never have
     to know the ladder internals or None-check the winner.
     """
-    comps = find_comparables(listing, sold_prices, epc_map)
+    comps = find_comparables(listing, sold_prices, epc_map, ring_sold_prices)
     if comps is None:
         return {
             "tier": None, "grade": "UNSCORED", "median": 0,
@@ -1671,24 +1687,81 @@ def _save_detail_cache(cache):
 
 
 def _parse_detail_page(text):
-    """Extract {sqft, sqm} from a listing detail page body, or {}."""
+    """Extract {sqft, sqm, postcode, tenure, chain, epc_rating} from an OTM
+    listing detail page body, or {} (estimate-rank D3).
+
+    Every field comes from HTML/embedded JSON that is ALREADY fetched for the
+    sqft enrichment — zero additional requests. Postcode is the property's
+    own ``"postcode":"WF13 4BU"`` JSON key (not a nearby/statistical match).
+    """
+    text = text or ""
     out = {}
-    sqft_match = re.search(r'"minimumAreaSqFt":(\d+)', text or "")
+    sqft_match = re.search(r'"minimumAreaSqFt":(\d+)', text)
     if sqft_match:
         out["sqft"] = int(sqft_match.group(1))
-    sqm_match = re.search(r'"minimumAreaSqM":(\d+)', text or "")
+    sqm_match = re.search(r'"minimumAreaSqM":(\d+)', text)
     if sqm_match:
         out["sqm"] = int(sqm_match.group(1))
+    pc_match = re.search(
+        r'"postcode"\s*:\s*"([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2})"', text, re.IGNORECASE
+    )
+    if pc_match:
+        out["postcode"] = pc_match.group(1).upper()
+    # Tenure lives in the key-facts JSON: {"title":"Tenure",...,"value":"Freehold"}
+    tenure_match = re.search(
+        r'"title"\s*:\s*"Tenure".{0,700}?"value"\s*:\s*"([^"]+)"',
+        text, re.IGNORECASE | re.DOTALL,
+    )
+    if tenure_match:
+        out["tenure"] = tenure_match.group(1).title()
+    # Chain-free is a property label: "propertyLabels":["Chain-free"]
+    labels_match = re.search(r'"propertyLabels"\s*:\s*\[([^\]]*)\]', text, re.DOTALL)
+    if labels_match is not None:
+        out["chain"] = "chain" in labels_match.group(1).lower()
+    epc_match = re.search(r'EPC rating:\s*([A-Ga-g])', text)
+    if epc_match:
+        out["epc_rating"] = epc_match.group(1).upper()
     return out
 
 
+def _extract_rightmove_facts(text):
+    """Extract {postcode, tenure} from a Rightmove listing detail page.
+
+    The property's own full postcode appears as the *only* quoted full postcode
+    literal on live pages (verified) — if more than one distinct literal exists
+    the signal is ambiguous and nothing is returned rather than a guess. Tenure
+    sits in the info-reel HTML as a bare ``<p>Freehold</p>``.
+    """
+    flat = (text or "").replace('\\"', '"').replace("\\u0022", '"')
+    pcs = {m.group(1).upper() for m in re.finditer(
+        r'"([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})"', flat)}
+    out = {}
+    if len(pcs) == 1:
+        out["postcode"] = next(iter(pcs))
+    tenure_match = re.search(
+        r'<p[^>]*>\s*(Freehold|Leasehold|Share of Freehold)\s*</p>',
+        text or "", re.IGNORECASE,
+    )
+    if tenure_match:
+        out["tenure"] = tenure_match.group(1).title()
+    return out
+
+
+def _apply_missing(src, dest):
+    """Copy src->dest for the enrichment fields, never overwriting an existing
+    value (a fresh parse must not clobber a config/state-sourced fact)."""
+    for key in ("sqft", "sqm", "postcode", "tenure", "chain", "epc_rating"):
+        if src.get(key) is not None and dest.get(key) is None:
+            dest[key] = src[key]
+
+
 def enrich_with_sqft(listings):
-    """Fetch sq ft from OTM detail pages for each listing (month-cached)."""
+    """Enrich OTM listings from their detail pages (sqft + postcode + tenure +
+    chain + EPC rating), month-cached (estimate-rank D3: all from pages already
+    fetched for sqft — zero additional requests)."""
     cache = _load_detail_cache()
     now = datetime.now()
     for listing in listings:
-        if listing.get("sqft") and listing.get("sqm"):
-            continue
         if listing["source"] != "OnTheMarket":
             continue
         pid = listing["id"].replace("otm-", "")
@@ -1696,10 +1769,10 @@ def enrich_with_sqft(listings):
         if isinstance(cached, dict) and cached.get("fetched"):
             try:
                 if (now - datetime.fromisoformat(cached["fetched"])).days < DETAIL_CACHE_DAYS:
-                    if cached.get("sqft") and not listing.get("sqft"):
-                        listing["sqft"] = cached["sqft"]
-                    if cached.get("sqm") and not listing.get("sqm"):
-                        listing["sqm"] = cached["sqm"]
+                    # Trust the cache within its window — including legacy
+                    # entries that predate postcode extraction. Those backfill
+                    # naturally on the next monthly refresh.
+                    _apply_missing(cached, listing)
                     continue
             except (ValueError, TypeError):
                 pass
@@ -1711,10 +1784,7 @@ def enrich_with_sqft(listings):
                 parsed = _parse_detail_page(r.text)
                 entry = {"fetched": now.isoformat(), **parsed}
                 cache[listing["id"]] = entry
-                if parsed.get("sqft") and not listing.get("sqft"):
-                    listing["sqft"] = parsed["sqft"]
-                if parsed.get("sqm") and not listing.get("sqm"):
-                    listing["sqm"] = parsed["sqm"]
+                _apply_missing(parsed, listing)
         except Exception as e:
             log(f"  sqft fetch failed for {pid}: {e}")
 
@@ -1799,6 +1869,12 @@ def detect_listing_status(listing):
         return "removed"
     if r.status_code != 200:
         return "error"
+    # estimate-rank D3: steal the full postcode/tenure from the page we just
+    # fetched (polled every run for status) — no extra requests. Persisted via
+    # _update_state so the NEXT run's scoring can use sector-tier comps.
+    for key, value in _extract_rightmove_facts(r.text).items():
+        if listing.get(key) is None:
+            listing[key] = value
     return _match_sold_marker(r.text)
 
 
@@ -2708,24 +2784,33 @@ def _attach_derived(listing, sold_prices, postcode_areas, state, all_listings,
     """
     area = extract_postcode_area(listing["address"])
     sold = sold_prices.get(area, []) if area else []
+    # estimate-rank D6: never silently borrow another district's pool — if the
+    # listing's own area has no sales, the district tiers having nothing is the
+    # honest answer (street/sector tiers may still score from the ring pool).
     area_used = area
-    if not sold:
-        for a in postcode_areas:
-            if sold_prices.get(a):
-                sold = sold_prices[a]
-                area_used = a
-                break
+
+    # Merged search-ring pool: street/sector tiers search across every scraped
+    # area so boundary streets match their true neighbours (estimate-rank D6).
+    ring_sold = []
+    for a in (postcode_areas if postcode_areas else ([area] if area else [])):
+        ring_sold.extend(sold_prices.get(a, []))
 
     entry = state.get("seen", {}).get(listing["id"], {})
     listing["first_seen"] = entry.get("first_seen") or entry.get("last_seen")
     history = entry.get("price_history")
     listing["price_history"] = history if isinstance(history, list) else None
     listing["relisted"] = listing["id"] in state.get("off_market", {})
+    # estimate-rank D3: restore detail-page facts persisted by a previous run
+    # (Rightmove postcodes are parsed during status polls, AFTER scoring, so
+    # they take effect from the next run onward).
+    for key in ("postcode", "tenure", "chain", "epc_rating"):
+        if listing.get(key) is None and entry.get(key) is not None:
+            listing[key] = entry[key]
 
     if caps is None:
         caps = NEGOTIATION_CAPS
 
-    comps = find_comparables(listing, sold, epc_map)
+    comps = find_comparables(listing, sold, epc_map, ring_sold)
     grade = (comps or {}).get("grade") or "UNSCORED"
     listing["evidence_grade"] = grade
     listing["evidence_basis"] = {
@@ -2827,6 +2912,26 @@ def _update_state(state, filtered, source_counts):
             seen[lid]["verdict_category"] = verdict.get("category")
             seen[lid]["pending_verdict"] = verdict.get("pending")
             seen[lid]["verdict_revised"] = verdict.get("revised")
+
+        # Estimate-rank: persist the clearing estimate every run so outcome
+        # rows can record ``estimate_at_decision`` and calibration can compare
+        # predicted vs actual (rating-trust D7 / estimate-rank D7 fast signal).
+        estimate = listing.get("estimate")
+        if isinstance(estimate, dict):
+            seen[lid]["estimate"] = {
+                "mid": estimate.get("mid"),
+                "low": estimate.get("low"),
+                "high": estimate.get("high"),
+                "grade": estimate.get("grade"),
+                "vs_asking": estimate.get("vs_asking"),
+            }
+            seen[lid]["estimate_mid"] = estimate.get("mid")
+
+        # estimate-rank D3: persist detail-page facts so the NEXT run's scoring
+        # can use them (Rightmove polls run after scoring; OTM enriches before).
+        for key in ("postcode", "tenure", "chain", "epc_rating"):
+            if listing.get(key) is not None:
+                seen[lid][key] = listing[key]
 
     # Promote listings absent for N consecutive runs to off-market
     for lid in list(seen.keys()):

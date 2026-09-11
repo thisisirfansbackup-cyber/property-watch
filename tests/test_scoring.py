@@ -275,7 +275,12 @@ def test_find_comparables_sector_fallback_when_street_thin():
     assert result["count"] == 3
 
 
-def test_find_comparables_epc_bedroom_tier_wins():
+def test_find_comparables_epc_bedrooms_do_not_create_a_tier():
+    """Bedrooms are no longer in the public EPC API (estimate-rank E1/D2).
+
+    The old tier-0 "EPC bedroom-verified street" ladder is retired — an EPC
+    map cannot create a separate tier. The street tier (1) simply wins.
+    """
     listing = {
         "address": "Firthcliffe Road, Liversedge, WF15",
         "type": "terraced",
@@ -287,19 +292,162 @@ def test_find_comparables_epc_bedroom_tier_wins():
         make_sale(160000, "2026-04-01", "terraced", paon="16"),
     ]
     epc = {
-        ("WF158AN", "firthcliffe road", "12"): 3,
-        ("WF158AN", "firthcliffe road", "14"): 3,
-        ("WF158AN", "firthcliffe road", "16"): 3,
+        ("WF158AN", "firthcliffe road", "12"): {"beds": 3, "area_sqm": 60},
+        ("WF158AN", "firthcliffe road", "14"): {"beds": 3, "area_sqm": 65},
+        ("WF158AN", "firthcliffe road", "16"): {"beds": 3, "area_sqm": 70},
     }
     result = watch.find_comparables(listing, sold, epc)
-    assert result["tier"] == 0
-    assert result["label"] == "3-bed, same type, your street"
+    assert result["tier"] == 1
+    assert result["label"] == "same type, your street"
 
 
 def test_find_comparables_none_when_no_evidence():
     listing = {"address": "Nowhere Street, WF15", "type": "terraced"}
     sold = [make_sale(100000, "2026-01-01", "flat", street="OTHER STREET")]
     assert watch.find_comparables(listing, sold) is None
+
+
+# ---------------------------------------------------------------------------
+# estimate-rank D6: merged ring pool for street/sector tiers; own-area for
+# district tiers; labels must state the exact winning pool.
+# ---------------------------------------------------------------------------
+
+def test_ring_pool_street_tier_spans_districts():
+    """A street too thin on the listing's OWN area must complete from the
+    merged search-ring pool (boundary streets match their true neighbours)."""
+    listing = {"address": "Mill Lane, Batley, WF17", "type": "terraced"}
+    own = [
+        make_sale(150000, "2026-06-01", street="MILL LANE", postcode="WF17 9AA"),
+        make_sale(155000, "2026-05-01", street="MILL LANE", postcode="WF17 9AA"),
+        make_sale(160000, "2026-04-01", street="CHURCH ROAD", postcode="WF17 9AB"),
+    ]
+    ring = [
+        *own,
+        make_sale(158000, "2026-07-01", street="MILL LANE", postcode="WF16 9BB"),
+    ]
+    result = watch.find_comparables(listing, own, ring_sold_prices=ring)
+    assert result["tier"] == 1
+    assert result["count"] == 3
+    # The label honestly signals the span across districts.
+    assert "across WF16, WF17" in result["label"]
+
+
+def test_ring_pool_sector_tier_uses_merged_pool():
+    """Sector tiers draw on the merged pool too: an own-area pool too thin to
+    form a sector falls back to same-sector sales elsewhere in the ring."""
+    listing = {"address": "Crown Street, Heckmondwike, WF16 9AZ", "type": "terraced"}
+    own = [
+        make_sale(150000, "2026-06-01", street="CROWN STREET", postcode="WF16 9AZ"),
+        make_sale(155000, "2026-05-01", street="CROWN STREET", postcode="WF16 9AZ"),
+    ]
+    ring = [
+        *own,
+        make_sale(140000, "2026-04-01", street="OTHER ROAD", postcode="WF16 9AX"),
+        make_sale(145000, "2026-03-01", street="ANOTHER ROAD", postcode="WF16 9AY"),
+    ]
+    result = watch.find_comparables(listing, own, ring_sold_prices=ring)
+    assert result["tier"] == 2
+    assert result["count"] == 4
+    assert result["label"] == "same type, sector WF16 9"
+
+
+def test_district_tier_scoped_to_own_area_only():
+    """The district tier must never blend the ring: 'WF16 district' means WF16
+    numbers and only WF16 numbers (estimate-rank D6, Leyland Road root cause)."""
+    listing = {"address": "Rosewood Drive, Heckmondwike, WF16", "type": "terraced"}
+    own = [
+        make_sale(120000, "2026-06-01", postcode="WF16 9ZZ"),
+        make_sale(125000, "2026-05-01", postcode="WF16 9ZY"),
+        make_sale(130000, "2026-04-01", postcode="WF16 9ZX"),
+        make_sale(135000, "2026-03-01", postcode="WF16 9ZW"),
+    ]
+    ring = [
+        *own,
+        make_sale(200000, "2026-06-01", postcode="WF17 1AA"),
+        make_sale(210000, "2026-05-01", postcode="WF17 1AB"),
+        make_sale(220000, "2026-04-01", postcode="WF17 1AC"),
+    ]
+    result = watch.find_comparables(listing, own, ring_sold_prices=ring)
+    assert result["tier"] == 3
+    assert result["count"] == 4       # own-area only, not 7 blended
+    # Own-area weighted median. (125k, not the 127.5k plain median: the
+    # 2026-03-01 sale is >6 months old so recency-weighting halves it.)
+    assert result["median"] == 125000
+    assert "WF16 district" in result["label"]
+
+
+def test_attach_derived_never_borrows_another_district_pool():
+    """F4(b): the silent cross-district fallback is removed. When the listing's
+    OWN area has no sales (and no street/sector match exists), the honest
+    answer is UNSCORED — not someone else's district labelled as this one's."""
+    listing = {
+        "id": "otm-test", "source": "OnTheMarket",
+        "address": "Willow End, Heckmondwike, WF16", "price": 140000,
+        "bedrooms": 3, "type": "terraced house", "url": "https://x",
+        "agent": "A", "image": "", "sqft": 800,
+        "first_seen": datetime.datetime.now().isoformat(),
+    }
+    state = {"seen": {}}
+    all_sold = {
+        "WF16": [],
+        "WF17": [
+            make_sale(100000, "2026-06-01", street="ROSEWOOD DRIVE", postcode="WF17 9AB"),
+            make_sale(105000, "2026-05-01", street="ROSEWOOD DRIVE", postcode="WF17 9AB"),
+            make_sale(110000, "2026-04-01", street="ROSEWOOD DRIVE", postcode="WF17 9AB"),
+        ],
+    }
+    watch._attach_derived(
+        listing, all_sold, {"WF16", "WF17"}, state, [listing],
+        epc_map=None, market_temps=None, caps=None, sold_meta=None, weights=None,
+    )
+    assert listing["evidence_grade"] == "UNSCORED"
+    assert listing["evidence_basis"]["area"] == "WF16"  # honest label, not WF17
+    assert listing["evidence_basis"]["label"] == "no comparables"
+
+
+def test_sector_tier_uses_detail_page_postcode():
+    """D3: a listing whose address only has a district yields a sector tier
+    once the detail page contributes its full postcode (WF13 -> WF13 4)."""
+    listing = {
+        "address": "Lyndale Mews, Staincliffe, Dewsbury, WF13",
+        "type": "terraced",
+        "postcode": "WF13 4BU",
+    }
+    own = [make_sale(150000, "2026-06-01", street="LYNDALE MEWS")]  # thin street
+    ring = [
+        *own,
+        make_sale(140000, "2026-04-01", street="OTHER ROAD", postcode="WF13 4BU"),
+        make_sale(145000, "2026-03-01", street="ANOTHER ROAD", postcode="WF13 4BA"),
+        make_sale(148000, "2026-02-01", street="MORE ROAD", postcode="WF13 4BB"),
+    ]
+    comps = watch.find_comparables(listing, own, ring_sold_prices=ring)
+    assert comps["tier"] == 2
+    assert comps["label"] == "same type, sector WF13 4"
+
+
+def test_detail_page_facts_persist_and_restore_via_state():
+    """D3 round-trip: facts parsed during status polls persist onto seen, and
+    _attach_derived restores them for the NEXT run's scoring."""
+    listing = make_listing(id="rm-1")
+    listing["postcode"] = "WF16 9PN"
+    listing["tenure"] = "Freehold"
+    state = {}
+    watch._update_state(state, [listing], {})
+    assert state["seen"]["rm-1"]["postcode"] == "WF16 9PN"
+    assert state["seen"]["rm-1"]["tenure"] == "Freehold"
+
+    # Next run: listing arrives WITHOUT the facts (only address); they must be
+    # restored from state before find_comparables is consulted.
+    restored = make_listing(id="rm-1")
+    assert restored.get("postcode") is None  # arrives without detail-page facts
+    assert restored.get("tenure") is None
+    state2 = {"seen": state["seen"], "off_market": {}}
+    watch._attach_derived(
+        restored, {"WF16": []}, {"WF16"}, state2, [restored],
+        epc_map=None, market_temps=None, caps=None, sold_meta=None, weights=None,
+    )
+    assert restored["postcode"] == "WF16 9PN"
+    assert restored["tenure"] == "Freehold"
 
 
 def test_type_key_maps_listing_type_variants():
