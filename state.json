@@ -6,7 +6,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249490",
-      "last_seen": "2026-09-13T19:10:24.551238",
+      "last_seen": "2026-09-13T21:32:40.712049",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -25,7 +25,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 170000,
         "low": 170000,
@@ -45,7 +45,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-13T19:10:24.551238",
+      "last_seen": "2026-09-13T21:32:40.712049",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -64,7 +64,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 165000,
         "low": 165000,
@@ -84,7 +84,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-13T19:10:24.551238",
+      "last_seen": "2026-09-13T21:32:40.712049",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -103,7 +103,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 174950,
         "low": 174950,
@@ -123,7 +123,7 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-13T19:10:24.551238",
+      "last_seen": "2026-09-13T21:32:40.712049",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -142,7 +142,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 165000,
         "low": 165000,
@@ -161,7 +161,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-03T11:45:07.412655",
-      "last_seen": "2026-09-13T19:10:24.551238",
+      "last_seen": "2026-09-13T21:32:40.712049",
       "price_history": [
         {
           "date": "2026-09-03T11:45:07.412655",
@@ -180,7 +180,7 @@
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 185000,
         "low": 185000,
@@ -200,7 +200,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-09-13T19:10:24.551238",
+      "last_seen": "2026-09-13T21:32:40.712049",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -219,7 +219,7 @@
       },
       "verdict_category": "bad",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 219950,
         "low": 219950,
@@ -239,7 +239,7 @@
       "sqft": 968,
       "source": "OnTheMarket",
       "first_seen": "2026-09-11T11:59:32.106726",
-      "last_seen": "2026-09-13T19:10:24.551238",
+      "last_seen": "2026-09-13T21:32:40.712049",
       "price_history": [
         {
           "date": "2026-09-11T11:59:32.106726",
@@ -258,7 +258,7 @@
       },
       "verdict_category": "fair",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 139950,
         "low": 139950,
@@ -273,7 +273,7 @@
       "epc_rating": "D"
     }
   },
-  "last_run": "2026-09-13T19:10:24.551356",
+  "last_run": "2026-09-13T21:32:40.712260",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -351,14 +351,6 @@
     }
   },
   "run_history": [
-    {
-      "ts": "2026-09-10T21:45:03.491512",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 6
-    },
     {
       "ts": "2026-09-11T00:10:39.540333",
       "sources": {
@@ -462,9 +454,17 @@
         "barkers": 120
       },
       "filtered": 7
+    },
+    {
+      "ts": "2026-09-13T21:32:40.712116",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 7
     }
   ],
-  "failed_runs": 1,
+  "failed_runs": 2,
   "last_successful_run": "2026-09-13T16:35:32.170625",
   "sold": {
     "rm-91657857": {
