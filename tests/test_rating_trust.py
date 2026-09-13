@@ -562,6 +562,22 @@ def test_match_sold_marker_nav_widget_not_a_sale():
     # The "and" variant (Rightmove sometimes uses & or and)
     page2 = page.replace("&amp;", "and")
     assert watch._match_sold_marker(page2) is None
+    # The HTML-entity variant — what live Rightmove pages actually ship
+    # ("Recently sold &amp; under offer"): the literal &amp; must not defeat
+    # the widget strip (regression: it false-fired UNDER_OFFER on Wyvern
+    # Close, rm-93038919, on its first run while still actively for sale).
+    page_encoded = page.replace("recently sold & under offer",
+                                "recently sold &amp; under offer")
+    assert watch._match_sold_marker(page_encoded) is None
+    # The nav/footer "Sold house prices" links (desktop + mobile nav, global
+    # footer) also sit on every Rightmove page — unescaping the widget
+    # unmasked them as a false "sold" (second Wyvern Close regression: the
+    # fixed page then archived as SOLD via "sold house prices").
+    page_nav = page_encoded + (
+        '<a data-parent-nav="house prices"> sold house prices </a>'
+        '<a title="search sold house prices">search sold house prices</a>'
+    )
+    assert watch._match_sold_marker(page_nav) is None
     # A real under-offer banner elsewhere on the page must still be detected
     page3 = page + "<span>Under Offer</span>"
     assert watch._match_sold_marker(page3) == "under_offer"
