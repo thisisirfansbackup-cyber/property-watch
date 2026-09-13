@@ -44,6 +44,18 @@
       "agent": "Watsons Property Services, Birstall",
       "image": "https://media.rightmove.co.uk/property-photo/b94fad930/92584293/b94fad930b81aa299fe5e44ed363f519.jpeg",
       "sqft": 750
+    },
+    {
+      "id": "rm-93038919",
+      "source": "Rightmove",
+      "address": "Wyvern Close, Batley, West Yorkshire, WF17",
+      "price": 150000,
+      "bedrooms": 3,
+      "type": "terraced",
+      "url": "https://www.rightmove.co.uk/properties/93038919",
+      "agent": "William H. Brown, Dewsbury",
+      "image": "https://media.rightmove.co.uk/property-photo/3c3cd0724/93038919/3c3cd0724e1d253ef2d4e7aea35420f3.jpeg",
+      "sqft": null
     }
   ],
   "email": {

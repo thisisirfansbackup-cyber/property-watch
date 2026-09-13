@@ -16,6 +16,7 @@ to skip the automatic git push (CI commits and pushes itself).
 
 import base64
 import csv
+import html
 import io
 import json
 import os
@@ -1827,7 +1828,13 @@ def _match_sold_marker(text):
     """
     if not text:
         return None
-    lower = text.lower()
+    # Markers are matched against raw page HTML, so HTML entities must be
+    # unescaped first: Rightmove ships the nav widget as
+    # "Recently sold &amp; under offer", whose literal "&amp;" defeated the
+    # strips below and false-fired UNDER_OFFER on every fresh listing
+    # (regression: Wyvern Close rm-93038919 archived as under_offer on its
+    # first run while still actively for sale).
+    lower = html.unescape(text).lower()
     # Strip the "recently sold & under offer" navigation widget that appears
     # on every listing page — it is not a status marker for this property.
     lower = lower.replace("recently sold & under offer", "")
@@ -1838,12 +1845,14 @@ def _match_sold_marker(text):
         return "under_offer"
     # A bare "sold" word can be historical/statistical boilerplate on pages
     # that are STILL for sale ("Last sold: 2023", "sold in the last 12
-    # months") — only a standalone current-status "sold" counts.
+    # months", the "Sold house prices" nav/footer links present on every
+    # Rightmove page) — only a standalone current-status "sold" counts.
     if re.search(r"\bsold\b", lower) and not any(
         skip in lower
         for skip in (
             "sold price", "sold prices", "sold history", "recently sold",
             "last sold", "sold in", "sold for", "sold on", "previously sold",
+            "sold house price",
         )
     ):
         return "sold"
