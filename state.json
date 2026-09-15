@@ -13,7 +13,7 @@
           "price": 170000
         }
       ],
-      "misses": 0,
+      "misses": 1,
       "removed_misses": 0,
       "evidence_basis": {
         "tier": 2,
@@ -45,7 +45,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-14T22:24:00.743123",
+      "last_seen": "2026-09-15T12:25:02.349990",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -55,24 +55,24 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": 2,
-        "label": "same type, sector WF15 6",
-        "count": 63,
-        "grade": "MEDIUM",
+        "tier": null,
+        "label": "no comparables",
+        "count": 0,
+        "grade": "UNSCORED",
         "area": "WF15",
-        "cache_fetched": "2026-09-14T22:23:48.872529"
+        "cache_fetched": null
       },
       "verdict_category": "over",
       "pending_verdict": null,
       "verdict_revised": true,
       "estimate": {
-        "mid": 144045,
-        "low": 132521,
-        "high": 155569,
-        "grade": "MEDIUM",
-        "vs_asking": -12.7
+        "mid": 165000,
+        "low": 165000,
+        "high": 165000,
+        "grade": "UNSCORED",
+        "vs_asking": 0.0
       },
-      "estimate_mid": 144045,
+      "estimate_mid": 165000,
       "postcode": "WF15 6QY",
       "tenure": "Freehold",
       "chain": true,
@@ -84,7 +84,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-14T22:24:00.743123",
+      "last_seen": "2026-09-15T12:25:02.349990",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -94,27 +94,24 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": 2,
-        "label": "same type, sector WF13 4",
-        "count": 81,
-        "grade": "MEDIUM",
+        "tier": null,
+        "label": "no comparables",
+        "count": 0,
+        "grade": "UNSCORED",
         "area": "WF13",
-        "cache_fetched": "2026-09-14T22:23:06.835920"
+        "cache_fetched": null
       },
       "verdict_category": "over",
-      "pending_verdict": {
-        "category": "bad",
-        "since": "2026-09-14T22:24:00.109930"
-      },
+      "pending_verdict": null,
       "verdict_revised": true,
       "estimate": {
-        "mid": 152731,
-        "low": 140513,
-        "high": 164949,
-        "grade": "MEDIUM",
-        "vs_asking": -12.7
+        "mid": 174950,
+        "low": 174950,
+        "high": 174950,
+        "grade": "UNSCORED",
+        "vs_asking": 0.0
       },
-      "estimate_mid": 152731,
+      "estimate_mid": 174950,
       "postcode": "WF13 4BN",
       "tenure": "Freehold",
       "chain": false,
@@ -126,7 +123,7 @@
       "sqft": 800,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249484",
-      "last_seen": "2026-09-14T22:24:00.743123",
+      "last_seen": "2026-09-15T12:25:02.349990",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -136,24 +133,24 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": 2,
-        "label": "same type, sector WF15 6",
-        "count": 63,
-        "grade": "MEDIUM",
+        "tier": null,
+        "label": "no comparables",
+        "count": 0,
+        "grade": "UNSCORED",
         "area": "",
         "cache_fetched": null
       },
       "verdict_category": "over",
       "pending_verdict": null,
-      "verdict_revised": false,
+      "verdict_revised": true,
       "estimate": {
-        "mid": 148500,
-        "low": 136620,
-        "high": 160380,
-        "grade": "MEDIUM",
-        "vs_asking": -10.0
+        "mid": 165000,
+        "low": 165000,
+        "high": 165000,
+        "grade": "UNSCORED",
+        "vs_asking": 0.0
       },
-      "estimate_mid": 148500,
+      "estimate_mid": 165000,
       "postcode": "WF15 6HL",
       "tenure": "Ask Agent",
       "chain": false
@@ -164,7 +161,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-03T11:45:07.412655",
-      "last_seen": "2026-09-14T22:24:00.743123",
+      "last_seen": "2026-09-15T12:25:02.349990",
       "price_history": [
         {
           "date": "2026-09-03T11:45:07.412655",
@@ -174,24 +171,24 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": 1,
-        "label": "same type, your street",
-        "count": 5,
-        "grade": "HIGH",
+        "tier": null,
+        "label": "no comparables",
+        "count": 0,
+        "grade": "UNSCORED",
         "area": "WF15",
-        "cache_fetched": "2026-09-14T22:23:48.872529"
+        "cache_fetched": null
       },
       "verdict_category": "over",
       "pending_verdict": null,
       "verdict_revised": true,
       "estimate": {
-        "mid": 179450,
-        "low": 172272,
-        "high": 186628,
-        "grade": "HIGH",
-        "vs_asking": -3.0
+        "mid": 185000,
+        "low": 185000,
+        "high": 185000,
+        "grade": "UNSCORED",
+        "vs_asking": 0.0
       },
-      "estimate_mid": 179450,
+      "estimate_mid": 185000,
       "postcode": "WF15 7EE",
       "tenure": "Ask Agent",
       "chain": false,
@@ -203,7 +200,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-09-14T22:24:00.743123",
+      "last_seen": "2026-09-15T12:25:02.349990",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -213,24 +210,24 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": 2,
-        "label": "same type, sector WF16 9",
-        "count": 90,
-        "grade": "MEDIUM",
+        "tier": null,
+        "label": "no comparables",
+        "count": 0,
+        "grade": "UNSCORED",
         "area": "",
         "cache_fetched": null
       },
       "verdict_category": "bad",
       "pending_verdict": null,
-      "verdict_revised": false,
+      "verdict_revised": true,
       "estimate": {
-        "mid": 197955,
-        "low": 182119,
-        "high": 213791,
-        "grade": "MEDIUM",
-        "vs_asking": -10.0
+        "mid": 219950,
+        "low": 219950,
+        "high": 219950,
+        "grade": "UNSCORED",
+        "vs_asking": 0.0
       },
-      "estimate_mid": 197955,
+      "estimate_mid": 219950,
       "postcode": "WF16 9EP",
       "tenure": "Freehold",
       "chain": true,
@@ -242,7 +239,7 @@
       "sqft": 968,
       "source": "OnTheMarket",
       "first_seen": "2026-09-11T11:30:05.284279",
-      "last_seen": "2026-09-14T22:24:00.743123",
+      "last_seen": "2026-09-15T12:25:02.349990",
       "price_history": [
         {
           "date": "2026-09-11T11:30:05.284279",
@@ -252,24 +249,24 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": 1,
-        "label": "same type, your street (across WF15, WF17)",
-        "count": 3,
-        "grade": "MEDIUM",
+        "tier": null,
+        "label": "no comparables",
+        "count": 0,
+        "grade": "UNSCORED",
         "area": "WF16",
-        "cache_fetched": "2026-09-14T22:24:00.082166"
+        "cache_fetched": null
       },
       "verdict_category": "fair",
       "pending_verdict": null,
       "verdict_revised": true,
       "estimate": {
-        "mid": 135752,
-        "low": 124892,
-        "high": 146612,
-        "grade": "MEDIUM",
-        "vs_asking": -3.0
+        "mid": 139950,
+        "low": 139950,
+        "high": 139950,
+        "grade": "UNSCORED",
+        "vs_asking": 0.0
       },
-      "estimate_mid": 135752,
+      "estimate_mid": 139950,
       "postcode": "WF16 9BY",
       "tenure": "Freehold",
       "chain": false,
@@ -281,7 +278,7 @@
       "sqft": null,
       "source": "Rightmove",
       "first_seen": "2026-09-13T22:27:34.221642",
-      "last_seen": "2026-09-14T22:24:00.743123",
+      "last_seen": "2026-09-15T12:25:02.349990",
       "price_history": [
         {
           "date": "2026-09-13T22:27:34.221642",
@@ -291,32 +288,29 @@
       "misses": 0,
       "removed_misses": 0,
       "evidence_basis": {
-        "tier": 2,
-        "label": "same type, sector WF17 0",
-        "count": 35,
-        "grade": "MEDIUM",
+        "tier": null,
+        "label": "no comparables",
+        "count": 0,
+        "grade": "UNSCORED",
         "area": "WF17",
-        "cache_fetched": "2026-09-14T22:23:36.130528"
+        "cache_fetched": null
       },
       "verdict_category": "fair",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-14T22:24:00.117661"
-      },
+      "pending_verdict": null,
       "verdict_revised": true,
       "estimate": {
-        "mid": 145500,
-        "low": 133860,
-        "high": 157140,
-        "grade": "MEDIUM",
-        "vs_asking": -3.0
+        "mid": 150000,
+        "low": 150000,
+        "high": 150000,
+        "grade": "UNSCORED",
+        "vs_asking": 0.0
       },
-      "estimate_mid": 145500,
+      "estimate_mid": 150000,
       "postcode": "WF17 0HB",
       "tenure": "Freehold"
     }
   },
-  "last_run": "2026-09-14T22:24:00.743233",
+  "last_run": "2026-09-15T12:25:02.350159",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -394,14 +388,6 @@
     }
   },
   "run_history": [
-    {
-      "ts": "2026-09-13T20:45:04.501490",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 7
-    },
     {
       "ts": "2026-09-13T21:00:04.825747",
       "sources": {
@@ -505,9 +491,17 @@
         "barkers": 120
       },
       "filtered": 8
+    },
+    {
+      "ts": "2026-09-15T12:25:02.350058",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 7
     }
   ],
-  "failed_runs": 0,
+  "failed_runs": 1,
   "last_successful_run": "2026-09-14T22:24:00.743197",
   "sold": {
     "rm-91657857": {
