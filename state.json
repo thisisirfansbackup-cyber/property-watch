@@ -6,7 +6,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -21,7 +21,7 @@
         "count": 61,
         "grade": "MEDIUM",
         "area": "WF15",
-        "cache_fetched": "2026-09-21T19:01:10.165478"
+        "cache_fetched": "2026-09-21T22:41:46.534950"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -45,7 +45,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-03T11:45:07.412655",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-03T11:45:07.412655",
@@ -60,7 +60,7 @@
         "count": 5,
         "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": "2026-09-21T19:01:10.165478"
+        "cache_fetched": "2026-09-21T22:41:46.534950"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -84,7 +84,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -127,7 +127,7 @@
       "sqft": 968,
       "source": "OnTheMarket",
       "first_seen": "2026-09-11T11:30:05.284279",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-11T11:30:05.284279",
@@ -142,7 +142,7 @@
         "count": 43,
         "grade": "MEDIUM",
         "area": "WF16",
-        "cache_fetched": "2026-09-21T19:01:06.601216"
+        "cache_fetched": "2026-09-21T22:41:42.493244"
       },
       "verdict_category": "fair",
       "pending_verdict": null,
@@ -166,7 +166,7 @@
       "sqft": null,
       "source": "Rightmove",
       "first_seen": "2026-09-13T22:27:34.221642",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-13T22:27:34.221642",
@@ -181,7 +181,7 @@
         "count": 34,
         "grade": "MEDIUM",
         "area": "WF17",
-        "cache_fetched": "2026-09-21T19:01:14.627056"
+        "cache_fetched": "2026-09-21T22:41:52.344209"
       },
       "verdict_category": "fair",
       "pending_verdict": null,
@@ -203,7 +203,7 @@
       "sqft": 667,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249487",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -218,7 +218,7 @@
         "count": 5,
         "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": "2026-09-21T19:01:10.165478"
+        "cache_fetched": "2026-09-21T22:41:46.534950"
       },
       "verdict_category": "fair",
       "pending_verdict": null,
@@ -242,7 +242,7 @@
       "sqft": 875,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249499",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -275,55 +275,13 @@
       "chain": true,
       "epc_rating": "D"
     },
-    "otm-18683740": {
-      "price": 174950,
-      "address": "Morland Close, Dewsbury WF13",
-      "sqft": 559,
-      "source": "OnTheMarket",
-      "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-21T13:34:25.015021",
-      "price_history": [
-        {
-          "date": "2026-09-02T22:30:06.289067",
-          "price": 174950
-        }
-      ],
-      "misses": 1,
-      "removed_misses": 0,
-      "evidence_basis": {
-        "tier": null,
-        "label": "no comparables",
-        "count": 0,
-        "grade": "UNSCORED",
-        "area": "WF13",
-        "cache_fetched": null
-      },
-      "verdict_category": "bad",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-21T13:34:24.683534"
-      },
-      "verdict_revised": true,
-      "estimate": {
-        "mid": 174950,
-        "low": 174950,
-        "high": 174950,
-        "grade": "UNSCORED",
-        "vs_asking": 0.0
-      },
-      "estimate_mid": 174950,
-      "postcode": "WF13 4BN",
-      "tenure": "Freehold",
-      "chain": false,
-      "epc_rating": "D"
-    },
     "otm-20380453": {
       "price": 195000,
       "address": "Walkley Terrace, Heckmondwike",
       "sqft": 699,
       "source": "OnTheMarket",
       "first_seen": "2026-09-21T19:01:16.700555",
-      "last_seen": "2026-09-21T19:01:16.700555",
+      "last_seen": "2026-09-21T22:41:52.913819",
       "price_history": [
         {
           "date": "2026-09-21T19:01:16.700555",
@@ -342,7 +300,7 @@
       },
       "verdict_category": "bad",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 175500,
         "low": 161460,
@@ -357,7 +315,7 @@
       "epc_rating": "D"
     }
   },
-  "last_run": "2026-09-21T19:01:16.700692",
+  "last_run": "2026-09-21T22:41:52.913930",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -432,17 +390,23 @@
           "price": 165000
         }
       ]
+    },
+    "otm-18683740": {
+      "address": "Morland Close, Dewsbury WF13",
+      "price": 174950,
+      "sqft": 559,
+      "source": "OnTheMarket",
+      "first_seen": "2026-09-02T22:15:07.249494",
+      "last_seen": "2026-09-21T13:34:25.015021",
+      "price_history": [
+        {
+          "date": "2026-09-02T22:30:06.289067",
+          "price": 174950
+        }
+      ]
     }
   },
   "run_history": [
-    {
-      "ts": "2026-09-18T19:23:46.384377",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 8
-    },
     {
       "ts": "2026-09-18T21:46:20.981037",
       "sources": {
@@ -546,10 +510,18 @@
         "barkers": 120
       },
       "filtered": 8
+    },
+    {
+      "ts": "2026-09-21T22:41:52.913893",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 8
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-09-21T19:01:16.700657",
+  "last_successful_run": "2026-09-21T22:41:52.913893",
   "sold": {
     "rm-91657857": {
       "address": "Leyland Road, Batley, WF17",
