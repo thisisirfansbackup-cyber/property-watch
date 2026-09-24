@@ -6,7 +6,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -23,12 +23,9 @@
         "area": "WF15",
         "cache_fetched": null
       },
-      "verdict_category": "over",
-      "pending_verdict": {
-        "category": "fair",
-        "since": "2026-09-24T12:29:26.412572"
-      },
-      "verdict_revised": true,
+      "verdict_category": "fair",
+      "pending_verdict": null,
+      "verdict_revised": false,
       "estimate": {
         "mid": 165000,
         "low": 165000,
@@ -48,7 +45,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -75,7 +72,7 @@
       },
       "verdict_category": "fair",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 199995,
         "low": 199995,
@@ -95,7 +92,7 @@
       "sqft": null,
       "source": "Rightmove",
       "first_seen": "2026-09-13T22:27:34.221642",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-13T22:27:34.221642",
@@ -114,7 +111,7 @@
       },
       "verdict_category": "fair",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 150000,
         "low": 150000,
@@ -132,7 +129,7 @@
       "sqft": null,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249487",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -151,7 +148,7 @@
       },
       "verdict_category": "fair",
       "pending_verdict": null,
-      "verdict_revised": true,
+      "verdict_revised": false,
       "estimate": {
         "mid": 170000,
         "low": 170000,
@@ -171,7 +168,7 @@
       "sqft": 875,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249499",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -188,12 +185,9 @@
         "area": "",
         "cache_fetched": null
       },
-      "verdict_category": "bad",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-24T12:29:26.412707"
-      },
-      "verdict_revised": true,
+      "verdict_category": "over",
+      "pending_verdict": null,
+      "verdict_revised": false,
       "estimate": {
         "mid": 220000,
         "low": 220000,
@@ -213,7 +207,7 @@
       "sqft": 699,
       "source": "OnTheMarket",
       "first_seen": "2026-09-21T19:01:16.700555",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-21T19:01:16.700555",
@@ -230,12 +224,9 @@
         "area": "",
         "cache_fetched": null
       },
-      "verdict_category": "bad",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-24T12:29:26.412500"
-      },
-      "verdict_revised": true,
+      "verdict_category": "over",
+      "pending_verdict": null,
+      "verdict_revised": false,
       "estimate": {
         "mid": 195000,
         "low": 195000,
@@ -255,7 +246,7 @@
       "sqft": 1023,
       "source": "OnTheMarket",
       "first_seen": "2026-09-22T12:17:46.374521",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-22T12:17:46.374521",
@@ -272,12 +263,9 @@
         "area": "WF16",
         "cache_fetched": null
       },
-      "verdict_category": "bad",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-24T12:29:26.412434"
-      },
-      "verdict_revised": true,
+      "verdict_category": "over",
+      "pending_verdict": null,
+      "verdict_revised": false,
       "estimate": {
         "mid": 199950,
         "low": 199950,
@@ -291,55 +279,13 @@
       "chain": false,
       "epc_rating": "D"
     },
-    "otm-18683740": {
-      "price": 174950,
-      "address": "Morland Close, Dewsbury WF13",
-      "sqft": 559,
-      "source": "OnTheMarket",
-      "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-09-23T23:24:24.277808",
-      "price_history": [
-        {
-          "date": "2026-09-02T22:30:06.289067",
-          "price": 174950
-        }
-      ],
-      "misses": 1,
-      "removed_misses": 0,
-      "evidence_basis": {
-        "tier": 2,
-        "label": "same type, sector WF13 4",
-        "count": 80,
-        "grade": "MEDIUM",
-        "area": "WF13",
-        "cache_fetched": "2026-09-23T23:24:23.456746"
-      },
-      "verdict_category": "fair",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-23T23:24:23.503059"
-      },
-      "verdict_revised": true,
-      "estimate": {
-        "mid": 157455,
-        "low": 144859,
-        "high": 170051,
-        "grade": "MEDIUM",
-        "vs_asking": -10.0
-      },
-      "estimate_mid": 157455,
-      "postcode": "WF13 4BN",
-      "tenure": "Freehold",
-      "chain": false,
-      "epc_rating": "D"
-    },
     "otm-20400269": {
       "price": 185000,
       "address": "Cornmill Drive, Liversedge, West Yorkshire, WF15",
       "sqft": 678,
       "source": "OnTheMarket",
       "first_seen": "2026-09-23T17:25:26.533063",
-      "last_seen": "2026-09-24T12:29:28.181757",
+      "last_seen": "2026-09-24T17:29:16.309833",
       "price_history": [
         {
           "date": "2026-09-23T17:25:26.533063",
@@ -356,12 +302,9 @@
         "area": "WF15",
         "cache_fetched": null
       },
-      "verdict_category": "fair",
-      "pending_verdict": {
-        "category": "over",
-        "since": "2026-09-24T12:29:26.412347"
-      },
-      "verdict_revised": true,
+      "verdict_category": "over",
+      "pending_verdict": null,
+      "verdict_revised": false,
       "estimate": {
         "mid": 185000,
         "low": 185000,
@@ -376,7 +319,7 @@
       "epc_rating": "C"
     }
   },
-  "last_run": "2026-09-24T12:29:28.181971",
+  "last_run": "2026-09-24T17:29:16.310093",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -479,17 +422,23 @@
           "price": 139950
         }
       ]
+    },
+    "otm-18683740": {
+      "address": "Morland Close, Dewsbury WF13",
+      "price": 174950,
+      "sqft": 559,
+      "source": "OnTheMarket",
+      "first_seen": "2026-09-02T22:15:07.249494",
+      "last_seen": "2026-09-23T23:24:24.277808",
+      "price_history": [
+        {
+          "date": "2026-09-02T22:30:06.289067",
+          "price": 174950
+        }
+      ]
     }
   },
   "run_history": [
-    {
-      "ts": "2026-09-20T20:58:08.767671",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 8
-    },
     {
       "ts": "2026-09-20T23:03:47.325160",
       "sources": {
@@ -593,9 +542,17 @@
         "barkers": 120
       },
       "filtered": 8
+    },
+    {
+      "ts": "2026-09-24T17:29:16.309943",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 8
     }
   ],
-  "failed_runs": 1,
+  "failed_runs": 2,
   "last_successful_run": "2026-09-23T23:24:24.277890",
   "sold": {
     "rm-91657857": {
