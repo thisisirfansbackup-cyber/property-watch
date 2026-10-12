@@ -6,7 +6,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -21,12 +21,12 @@
         "count": 58,
         "grade": "MEDIUM",
         "area": "WF15",
-        "cache_fetched": "2026-10-12T16:24:46.933916"
+        "cache_fetched": "2026-10-12T23:07:30.537929"
       },
       "verdict_category": "fair",
       "pending_verdict": {
         "category": "over",
-        "since": "2026-10-12T16:24:58.281070"
+        "since": "2026-10-12T23:07:30.568507"
       },
       "verdict_revised": true,
       "estimate": {
@@ -48,7 +48,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -95,7 +95,7 @@
       "sqft": 678,
       "source": "OnTheMarket",
       "first_seen": "2026-09-23T17:25:26.533063",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-09-23T17:25:26.533063",
@@ -114,7 +114,7 @@
         "count": 6,
         "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": "2026-10-12T16:24:46.933916"
+        "cache_fetched": "2026-10-12T23:07:30.537929"
       },
       "verdict_category": "fair",
       "pending_verdict": null,
@@ -138,7 +138,7 @@
       "sqft": 785,
       "source": "OnTheMarket",
       "first_seen": "2026-09-30T18:30:28.677160",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-09-30T18:30:28.677160",
@@ -153,7 +153,7 @@
         "count": 41,
         "grade": "MEDIUM",
         "area": "WF15",
-        "cache_fetched": "2026-10-12T16:24:46.933916"
+        "cache_fetched": "2026-10-12T23:07:30.537929"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -177,7 +177,7 @@
       "sqft": 861,
       "source": "OnTheMarket",
       "first_seen": "2026-10-02T18:37:48.163541",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-10-02T18:37:48.163541",
@@ -216,7 +216,7 @@
       "sqft": null,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249487",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -231,7 +231,7 @@
         "count": 6,
         "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": "2026-10-12T16:24:46.933916"
+        "cache_fetched": "2026-10-12T23:07:30.537929"
       },
       "verdict_category": "fair",
       "pending_verdict": null,
@@ -254,7 +254,7 @@
       "sqft": 875,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249499",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -271,12 +271,9 @@
         "area": "",
         "cache_fetched": null
       },
-      "verdict_category": "over",
-      "pending_verdict": {
-        "category": "bad",
-        "since": "2026-10-12T16:24:58.286087"
-      },
-      "verdict_revised": true,
+      "verdict_category": "bad",
+      "pending_verdict": null,
+      "verdict_revised": false,
       "estimate": {
         "mid": 220000,
         "low": 220000,
@@ -296,7 +293,7 @@
       "sqft": 711,
       "source": "OnTheMarket",
       "first_seen": "2026-10-08T14:19:23.513472",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-10-08T14:19:23.513472",
@@ -335,7 +332,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-10-12T16:24:59.970851",
+      "last_seen": "2026-10-12T23:07:31.165894",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -350,12 +347,12 @@
         "count": 80,
         "grade": "MEDIUM",
         "area": "WF13",
-        "cache_fetched": "2026-10-12T16:24:53.914811"
+        "cache_fetched": "2026-10-12T23:07:19.670684"
       },
       "verdict_category": "fair",
       "pending_verdict": {
         "category": "over",
-        "since": "2026-10-12T16:24:58.289588"
+        "since": "2026-10-12T23:07:30.575091"
       },
       "verdict_revised": true,
       "estimate": {
@@ -370,9 +367,48 @@
       "tenure": "Freehold",
       "chain": false,
       "epc_rating": "D"
+    },
+    "otm-19746369": {
+      "price": 120000,
+      "address": "Listing Drive, Liversedge, West Yorkshire, WF15",
+      "sqft": 872,
+      "source": "OnTheMarket",
+      "first_seen": "2026-10-12T23:07:31.165894",
+      "last_seen": "2026-10-12T23:07:31.165894",
+      "price_history": [
+        {
+          "date": "2026-10-12T23:07:31.165894",
+          "price": 120000
+        }
+      ],
+      "misses": 0,
+      "removed_misses": 0,
+      "evidence_basis": {
+        "tier": 2,
+        "label": "same type, sector WF15 6",
+        "count": 58,
+        "grade": "MEDIUM",
+        "area": "WF15",
+        "cache_fetched": "2026-10-12T23:07:30.537929"
+      },
+      "verdict_category": "great",
+      "pending_verdict": null,
+      "verdict_revised": true,
+      "estimate": {
+        "mid": 116400,
+        "low": 107088,
+        "high": 125712,
+        "grade": "MEDIUM",
+        "vs_asking": -3.0
+      },
+      "estimate_mid": 116400,
+      "postcode": "WF15 6HQ",
+      "tenure": "Freehold",
+      "chain": false,
+      "epc_rating": "D"
     }
   },
-  "last_run": "2026-10-12T16:24:59.971033",
+  "last_run": "2026-10-12T23:07:31.166083",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -535,14 +571,6 @@
   },
   "run_history": [
     {
-      "ts": "2026-10-08T14:19:23.513569",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 10
-    },
-    {
       "ts": "2026-10-08T20:01:23.985676",
       "sources": {
         "ontemarket": 29,
@@ -645,10 +673,18 @@
         "barkers": 120
       },
       "filtered": 9
+    },
+    {
+      "ts": "2026-10-12T23:07:31.166042",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 10
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-10-12T16:24:59.970979",
+  "last_successful_run": "2026-10-12T23:07:31.166042",
   "sold": {
     "rm-91657857": {
       "address": "Leyland Road, Batley, WF17",
