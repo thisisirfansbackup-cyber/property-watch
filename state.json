@@ -6,7 +6,7 @@
       "sqft": 731,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249496",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -18,15 +18,15 @@
       "evidence_basis": {
         "tier": 2,
         "label": "same type, sector WF15 6",
-        "count": 59,
+        "count": 58,
         "grade": "MEDIUM",
         "area": "WF15",
-        "cache_fetched": "2026-10-11T22:38:41.995798"
+        "cache_fetched": "2026-10-12T16:24:46.933916"
       },
       "verdict_category": "fair",
       "pending_verdict": {
         "category": "over",
-        "since": "2026-10-11T22:38:53.453383"
+        "since": "2026-10-12T16:24:58.281070"
       },
       "verdict_revised": true,
       "estimate": {
@@ -48,7 +48,7 @@
       "sqft": 656,
       "source": "OnTheMarket",
       "first_seen": "2026-09-07T13:13:43.199751",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-09-07T13:13:43.199751",
@@ -89,54 +89,21 @@
       "chain": true,
       "epc_rating": "D"
     },
-    "rm-93038919": {
-      "price": 150000,
-      "address": "Wyvern Close, Batley, West Yorkshire, WF17",
-      "sqft": null,
-      "source": "Rightmove",
-      "first_seen": "2026-09-13T22:27:34.221642",
-      "last_seen": "2026-10-11T22:38:53.971961",
-      "price_history": [
-        {
-          "date": "2026-09-13T22:27:34.221642",
-          "price": 150000
-        }
-      ],
-      "misses": 0,
-      "removed_misses": 0,
-      "evidence_basis": {
-        "tier": 2,
-        "label": "same type, sector WF17 0",
-        "count": 38,
-        "grade": "MEDIUM",
-        "area": "WF17",
-        "cache_fetched": "2026-10-11T22:38:53.407633"
-      },
-      "verdict_category": "fair",
-      "pending_verdict": null,
-      "verdict_revised": true,
-      "estimate": {
-        "mid": 145500,
-        "low": 133860,
-        "high": 157140,
-        "grade": "MEDIUM",
-        "vs_asking": -3.0
-      },
-      "estimate_mid": 145500,
-      "postcode": "WF17 0HB",
-      "tenure": "Freehold"
-    },
     "otm-20400269": {
-      "price": 185000,
+      "price": 174000,
       "address": "Cornmill Drive, Liversedge, West Yorkshire, WF15",
       "sqft": 678,
       "source": "OnTheMarket",
       "first_seen": "2026-09-23T17:25:26.533063",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-09-23T17:25:26.533063",
           "price": 185000
+        },
+        {
+          "date": "2026-10-12T16:24:59.970851",
+          "price": 174000
         }
       ],
       "misses": 0,
@@ -147,19 +114,19 @@
         "count": 6,
         "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": "2026-10-11T22:38:41.995798"
+        "cache_fetched": "2026-10-12T16:24:46.933916"
       },
-      "verdict_category": "over",
+      "verdict_category": "fair",
       "pending_verdict": null,
       "verdict_revised": true,
       "estimate": {
-        "mid": 179450,
-        "low": 172272,
-        "high": 186628,
+        "mid": 168780,
+        "low": 162029,
+        "high": 175531,
         "grade": "HIGH",
         "vs_asking": -3.0
       },
-      "estimate_mid": 179450,
+      "estimate_mid": 168780,
       "postcode": "WF15 7EE",
       "tenure": "Freehold",
       "chain": false,
@@ -171,7 +138,7 @@
       "sqft": 785,
       "source": "OnTheMarket",
       "first_seen": "2026-09-30T18:30:28.677160",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-09-30T18:30:28.677160",
@@ -186,7 +153,7 @@
         "count": 41,
         "grade": "MEDIUM",
         "area": "WF15",
-        "cache_fetched": "2026-10-11T22:38:41.995798"
+        "cache_fetched": "2026-10-12T16:24:46.933916"
       },
       "verdict_category": "over",
       "pending_verdict": null,
@@ -210,7 +177,7 @@
       "sqft": 861,
       "source": "OnTheMarket",
       "first_seen": "2026-10-02T18:37:48.163541",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-10-02T18:37:48.163541",
@@ -249,7 +216,7 @@
       "sqft": null,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249487",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -264,7 +231,7 @@
         "count": 6,
         "grade": "HIGH",
         "area": "WF15",
-        "cache_fetched": "2026-10-11T22:38:41.995798"
+        "cache_fetched": "2026-10-12T16:24:46.933916"
       },
       "verdict_category": "fair",
       "pending_verdict": null,
@@ -287,7 +254,7 @@
       "sqft": 875,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249499",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -305,8 +272,11 @@
         "cache_fetched": null
       },
       "verdict_category": "over",
-      "pending_verdict": null,
-      "verdict_revised": false,
+      "pending_verdict": {
+        "category": "bad",
+        "since": "2026-10-12T16:24:58.286087"
+      },
+      "verdict_revised": true,
       "estimate": {
         "mid": 220000,
         "low": 220000,
@@ -326,7 +296,7 @@
       "sqft": 711,
       "source": "OnTheMarket",
       "first_seen": "2026-10-08T14:19:23.513472",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-10-08T14:19:23.513472",
@@ -365,7 +335,7 @@
       "sqft": 559,
       "source": "OnTheMarket",
       "first_seen": "2026-09-02T22:15:07.249494",
-      "last_seen": "2026-10-11T22:38:53.971961",
+      "last_seen": "2026-10-12T16:24:59.970851",
       "price_history": [
         {
           "date": "2026-09-02T22:30:06.289067",
@@ -380,29 +350,29 @@
         "count": 80,
         "grade": "MEDIUM",
         "area": "WF13",
-        "cache_fetched": "2026-10-11T22:38:47.615356"
+        "cache_fetched": "2026-10-12T16:24:53.914811"
       },
       "verdict_category": "fair",
       "pending_verdict": {
         "category": "over",
-        "since": "2026-10-11T22:38:53.461826"
+        "since": "2026-10-12T16:24:58.289588"
       },
       "verdict_revised": true,
       "estimate": {
-        "mid": 159030,
-        "low": 146308,
-        "high": 171752,
+        "mid": 156668,
+        "low": 144135,
+        "high": 169201,
         "grade": "MEDIUM",
-        "vs_asking": -9.1
+        "vs_asking": -10.4
       },
-      "estimate_mid": 159030,
+      "estimate_mid": 156668,
       "postcode": "WF13 4BN",
       "tenure": "Freehold",
       "chain": false,
       "epc_rating": "D"
     }
   },
-  "last_run": "2026-10-11T22:38:53.972081",
+  "last_run": "2026-10-12T16:24:59.971033",
   "market_history": {},
   "off_market": {
     "otm-19914264": {
@@ -565,14 +535,6 @@
   },
   "run_history": [
     {
-      "ts": "2026-10-08T00:18:00.382272",
-      "sources": {
-        "ontemarket": 29,
-        "barkers": 120
-      },
-      "filtered": 10
-    },
-    {
       "ts": "2026-10-08T14:19:23.513569",
       "sources": {
         "ontemarket": 29,
@@ -675,10 +637,18 @@
         "barkers": 120
       },
       "filtered": 10
+    },
+    {
+      "ts": "2026-10-12T16:24:59.970979",
+      "sources": {
+        "ontemarket": 29,
+        "barkers": 120
+      },
+      "filtered": 9
     }
   ],
   "failed_runs": 0,
-  "last_successful_run": "2026-10-11T22:38:53.972047",
+  "last_successful_run": "2026-10-12T16:24:59.970979",
   "sold": {
     "rm-91657857": {
       "address": "Leyland Road, Batley, WF17",
@@ -712,6 +682,24 @@
       "status": "under_offer",
       "days_on_market": 0,
       "evidence_basis": null
+    },
+    "rm-93038919": {
+      "address": "Wyvern Close, Batley, West Yorkshire, WF17",
+      "price": 150000,
+      "sqft": null,
+      "source": "Rightmove",
+      "first_seen": "2026-09-13T22:27:34.221642",
+      "sold_date": "2026-10-12T16:24:58.878200",
+      "status": "stc",
+      "days_on_market": 28,
+      "evidence_basis": {
+        "tier": 2,
+        "label": "same type, sector WF17 0",
+        "count": 38,
+        "grade": "MEDIUM",
+        "area": "WF17",
+        "cache_fetched": "2026-10-11T22:38:53.407633"
+      }
     }
   },
   "outcomes": {
@@ -738,6 +726,15 @@
         "date": "2026-09-05T11:06:22.471744",
         "status": "under_offer",
         "days": 0,
+        "note": null,
+        "source": "auto"
+      }
+    ],
+    "rm-93038919": [
+      {
+        "date": "2026-10-12T16:24:58.878200",
+        "status": "stc",
+        "days": 28,
         "note": null,
         "source": "auto"
       }
